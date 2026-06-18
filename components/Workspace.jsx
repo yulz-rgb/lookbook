@@ -51,7 +51,7 @@ const NAV_ICONS = {
 };
 const LOCAL_KEY = 'yachtUniform.workspace.v5';
 const CATALOG_VERSION_KEY = 'yachtUniform.catalogVersion';
-const CATALOG_VERSION = 'marina-v5-colour-images';
+const CATALOG_VERSION = 'marina-v6-colour-images';
 const ORDER_HISTORY_KEY = 'yachtUniform.orders.v1';
 
 const DEFAULT_SETTINGS = {
@@ -256,6 +256,10 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             nextProducts = enrichProductsWithDefaults(nextProducts, defaultProducts);
           }
         }
+        if (storedVersion !== CATALOG_VERSION || (data.products && productsMissingAttribution(data.products))) {
+          nextProducts = enrichProductsWithDefaults(nextProducts || defaultProducts, defaultProducts);
+          window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
+        }
         /* eslint-disable react-hooks/set-state-in-effect */
         if (nextProducts) setProducts(nextProducts);
         if (data.looks) setLooks(data.looks);
@@ -263,9 +267,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
         if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
         if (data.orderHistory) setOrderHistory(data.orderHistory);
         if (data.approvalLog) setApprovalLog(data.approvalLog);
-        if (storedVersion !== CATALOG_VERSION || (nextProducts && productsMissingAttribution(data.products))) {
-          window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
-        }
         /* eslint-enable react-hooks/set-state-in-effect */
       }
       const ordersRaw = window.localStorage.getItem(ORDER_HISTORY_KEY);
