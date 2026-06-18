@@ -107,7 +107,6 @@ model Product {
   category        String
   name            String
   brand           String?
-  sku             String?
   price           Decimal     @default(0) @db.Decimal(10, 2)
   currency        String      @default("EUR")
   vatRate         Decimal     @default(0) @db.Decimal(5, 2)
@@ -123,6 +122,8 @@ model Product {
   sizeRange       String?
   imageHint       String      @default("polo")
   imageUrl        String?
+  productUrl      String?
+  colourImages    Json?
   active          Boolean     @default(true)
   sortIndex       Int         @default(0)
   yacht           Yacht       @relation(fields: [yachtId], references: [id], onDelete: Cascade)
@@ -131,7 +132,6 @@ model Product {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  @@unique([yachtId, sku])
   @@index([yachtId, category])
   @@index([yachtId, active])
 }

@@ -37,7 +37,6 @@ async function main() {
   await prisma.look.deleteMany({ where: { yachtId: yacht.id } });
   await prisma.product.deleteMany({ where: { yachtId: yacht.id } });
 
-  const skuToId = new Map();
   const legacyIdToId = new Map();
   for (let i = 0; i < defaultProducts.length; i += 1) {
     const p = defaultProducts[i];
@@ -47,7 +46,6 @@ async function main() {
         category: p.category,
         name: p.name,
         brand: p.brand,
-        sku: p.sku,
         price: p.price,
         currency: 'EUR',
         colours: p.colours || [],
@@ -64,7 +62,6 @@ async function main() {
         sortIndex: i,
       },
     });
-    skuToId.set(p.sku, created.id);
     legacyIdToId.set(p.id, created.id);
   }
 

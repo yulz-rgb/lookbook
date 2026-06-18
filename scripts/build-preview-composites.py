@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Composite underwear model cutouts onto a plain white studio background."""
+"""Build transparent model cutouts and a clean yacht-deck panel background."""
 
 from __future__ import annotations
 
@@ -8,18 +8,13 @@ from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
-
-ROOT = Path(__file__).resolve().parents[1]
+from PIL import Image, ImageFilter
 sys.path.insert(0, str(ROOT / '.venv-rembg'))
 
 from rembg import new_session, remove  # noqa: E402
 
 PREVIEW = ROOT / 'public' / 'preview'
-OUT_W, OUT_H = 960, 960
-MODEL_HEIGHT_RATIO = 0.76
-TOP_MARGIN_RATIO = 0.06
-WHITE = (255, 255, 255)
+PANEL_WIDTH_RATIO = 0.42
 
 
 @lru_cache(maxsize=1)
@@ -51,40 +46,33 @@ def cutout_model(src: Path) -> Image.Image:
     return img.crop(content_bbox(img))
 
 
-def build_white_background() -> Image.Image:
-    return Image.new('RGB', (OUT_W, OUT_H), WHITE)
-
-
-def composite(model_path: Path, out_path: Path, canvas_base: Image.Image) -> None:
-    model = cutout_model(model_path)
-    target_h = int(OUT_H * MODEL_HEIGHT_RATIO)
-    scale = target_h / model.height
-    target_w = int(model.width * scale)
-    model = model.resize((target_w, target_h), Image.Resampling.LANCZOS)
-    canvas = canvas_base.copy().convert('RGBA')
-    x = (OUT_W - target_w) // 2
-    y = int(OUT_H * TOP_MARGIN_RATIO)
-    canvas.alpha_composite(model, (x, y))
-    canvas.convert('RGB').save(out_path, quality=92, optimize=True)
-    print(f'wrote {out_path.name}')
+def build_deck_panel() -> Image.Image:
+    scene = Image.open(PREVIEW / 'yacht-deck-scene.jpg').convert('RGB')
+    w, h = scene.size
+    panel = scene.crop((0, 0, int(w * PANEL_WIDTH_RATIO), h))
+    # Soften the reference screenshot so the live cutout model reads clearly on top.
+    return panel.filter(ImageFilter.GaussianBlur(2.8))
 
 
 def main() -> None:
     PREVIEW.mkdir(parents=True, exist_ok=True)
-    white = build_white_background()
-    white.save(PREVIEW / 'yacht-deck-clean.jpg', quality=92, optimize=True)
+
+    deck_panel = build_deck_panel()
+    deck_panel.save(PREVIEW / 'yacht-deck-panel.jpg', quality=92, optimize=True)
+    print('wrote yacht-deck-panel.jpg')
 
     pairs = [
-        ('model-woman-front.jpg', 'composite-woman-front.jpg'),
-        ('model-woman-back.jpg', 'composite-woman-back.jpg'),
-        ('model-man-front.jpg', 'composite-man-front.jpg'),
-        ('model-man-back.jpg', 'composite-man-back.jpg'),
+        ('model-woman-front.jpg', 'cutout-woman-front.png'),
+        ('model-woman-back.jpg', 'cutout-woman-back.png'),
+        ('model-man-front.jpg', 'cutout-man-front.png'),
+        ('model-man-back.jpg', 'cutout-man-back.png'),
     ]
     for src_name, out_name in pairs:
         src = PREVIEW / src_name
         if not src.exists():
             raise SystemExit(f'missing model asset: {src}')
-        composite(src, PREVIEW / out_name, white)
+        cutout_model(src).save(PREVIEW / out_name, optimize=True)
+        print(f'wrote {out_name}')
 
 
 if __name__ == '__main__':

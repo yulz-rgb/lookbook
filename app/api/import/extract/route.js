@@ -4,6 +4,7 @@ import {
   enrichRecordsWithDetailPrices,
   parseProductsFromCatalogText,
   extractShopifyCatalog,
+  filterUniformCatalogRecords,
   isSafeFetchUrl,
   brandFromHostname,
 } from '../../../../lib/catalogExtract';
@@ -87,7 +88,9 @@ export async function POST(req) {
         return Response.json({ error: 'Could not read text from that PDF. Try a text-based catalog or use CSV.' }, { status: 422 });
       }
       const brandHint = String(form.get('brand') || '').trim();
-      const records = parseProductsFromCatalogText(text, { brand: brandHint, supplierName: brandHint });
+      const records = filterUniformCatalogRecords(
+        parseProductsFromCatalogText(text, { brand: brandHint, supplierName: brandHint }),
+      );
       if (records.length === 0) {
         return Response.json({
           error: 'No products found in that PDF. Try a clearer price list or paste a CSV instead.',
@@ -143,9 +146,11 @@ export async function POST(req) {
       }
     }
 
+    records = filterUniformCatalogRecords(records);
+
     if (records.length === 0) {
       return Response.json({
-        error: 'No products found on that page. Try a category or catalog page, or upload the supplier PDF.',
+        error: 'No uniform products found on that page. Try a category or catalog page, or upload the supplier PDF.',
         brand: brand || brandFromHostname(url),
       }, { status: 422 });
     }

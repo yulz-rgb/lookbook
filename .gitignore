@@ -31,6 +31,7 @@ next-env.d.ts
 
 # Python crawler
 uniform-crawler/venv/
+.venv-rembg/
 uniform-crawler/__pycache__/
 uniform-crawler/*.pyc
 IMAGES/

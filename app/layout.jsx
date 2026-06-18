@@ -1,7 +1,14 @@
 import './globals.css';
+import { Inter } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import { Analytics } from '@vercel/analytics/next';
 import { hasClerk } from '../lib/config';
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-sans',
+});
 
 export const metadata = {
   title: 'Yacht Uniform Lookbook',
@@ -30,8 +37,8 @@ const clerkAppearance = {
 
 export default function RootLayout({ children }) {
   const body = (
-    <html lang="en">
-      <body>
+    <html lang="en" className={inter.variable}>
+      <body className={inter.className}>
         {children}
         <Analytics />
       </body>

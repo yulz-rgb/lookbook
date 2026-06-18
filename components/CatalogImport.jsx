@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { parseCatalogCsv, CATALOG_COLUMNS, toCsv } from '../lib/csv';
 import { validateCatalogRecord } from '../lib/validation';
+import { ProductAttribution } from './ProductAttribution';
 
 const METHODS = [
   { id: 'pdf', label: 'PDF catalog', icon: FileUp },
@@ -160,12 +161,15 @@ export function CatalogImport({ mode, onClose, onLocalImport }) {
         return;
       }
 
+      const shouldReplace = checked.valid.length >= 50;
+
       if (mode === 'server') {
         const importCsv = toCsv([
           CATALOG_COLUMNS,
           ...checked.valid.map((v) => CATALOG_COLUMNS.map((col) => {
             const val = v.value[col];
             if (Array.isArray(val)) return val.join('|');
+            if (val != null && typeof val === 'object') return JSON.stringify(val);
             if (val == null) return '';
             return String(val);
           })),
@@ -173,25 +177,22 @@ export function CatalogImport({ mode, onClose, onLocalImport }) {
         const res = await fetch('/api/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csv: importCsv, filename: 'catalog-import.csv' }),
+          body: JSON.stringify({
+            csv: importCsv,
+            filename: 'catalog-import.csv',
+            replace: shouldReplace,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Import failed');
         setResult(data);
-        const products = checked.valid.map((v) => ({
-          ...v.value,
-          id: `product-${v.value.sku || Math.random().toString(36).slice(2, 9)}`,
-        }));
-        onLocalImport(products, { replace: products.length >= 100 });
-        if (products.length >= 100) {
-          window.setTimeout(() => window.location.reload(), 800);
-        }
+        window.setTimeout(() => window.location.reload(), 400);
       } else {
         const products = checked.valid.map((v) => ({
           ...v.value,
-          id: `product-${v.value.sku || Math.random().toString(36).slice(2, 9)}`,
+          id: `product-${Math.random().toString(36).slice(2, 9)}`,
         }));
-        onLocalImport(products, { replace: products.length >= 100 });
+        onLocalImport(products, { replace: shouldReplace });
         setResult({ created: products.length, updated: 0, failed: checked.invalid.length });
       }
     } catch (err) {
@@ -331,15 +332,12 @@ export function CatalogImport({ mode, onClose, onLocalImport }) {
               <ul className="import-preview-list">
                 {report.valid.slice(0, 8).map((row) => (
                   <li key={`${row.row}-${row.value.name}`}>
-                    <strong>{row.value.name}</strong>
-                    <span>
-                      {row.value.brand ? `${row.value.brand} · ` : ''}
-                      {row.value.supplierName ? (
-                        row.value.productUrl ? (
-                          <a href={row.value.productUrl} target="_blank" rel="noopener noreferrer">{row.value.supplierName}</a>
-                        ) : row.value.supplierName
-                      ) : ''}
-                      {row.value.price > 0 ? ` · ${row.value.currency} ${row.value.price}` : ' · Price TBC'}
+                    <div className="import-preview-main">
+                      <strong>{row.value.name}</strong>
+                      <ProductAttribution product={row.value} compact />
+                    </div>
+                    <span className="import-preview-price">
+                      {row.value.price > 0 ? `${row.value.currency} ${row.value.price}` : 'Price TBC'}
                     </span>
                   </li>
                 ))}

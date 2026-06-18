@@ -36,7 +36,7 @@ export async function POST(req) {
     return Response.json({ error: 'Insufficient permissions to import' }, { status: 403 });
   }
 
-  const { csv, filename } = await req.json();
+  const { csv, filename, replace } = await req.json();
   const { records } = parseCatalogCsv(csv || '');
   if (records.length === 0) {
     return Response.json({ error: 'No data rows found in CSV' }, { status: 400 });
@@ -54,6 +54,12 @@ export async function POST(req) {
     return Response.json({ error: 'All rows failed validation', errors: invalid }, { status: 422 });
   }
 
-  const result = await applyCatalogImport(ctx.yachtId, valid, filename || 'catalog.csv', ctx.user.id);
+  const result = await applyCatalogImport(
+    ctx.yachtId,
+    valid,
+    filename || 'catalog.csv',
+    ctx.user.id,
+    { replace: Boolean(replace) },
+  );
   return Response.json({ ...result, invalid: invalid.length, validationErrors: invalid });
 }

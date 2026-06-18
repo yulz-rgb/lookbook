@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ZoomIn, ZoomOut, RotateCw, Sun } from 'lucide-react';
+import { Mannequin } from './Mannequin';
 import { getPreviewModelSrc, PREVIEW_BASE_SCALE } from '../lib/previewModels';
 
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2;
 const ZOOM_STEP = 0.12;
 
-export function ModelPreview({ bodyType }) {
+export function ModelPreview({ bodyType, selectedProducts = [] }) {
   const [zoom, setZoom] = useState(1);
   const [view, setView] = useState('front');
   const [brightness, setBrightness] = useState(1);
@@ -38,12 +39,13 @@ export function ModelPreview({ bodyType }) {
   }, [clampZoom]);
 
   const modelSrc = getPreviewModelSrc(bodyType, view);
+  const hasGarments = selectedProducts.length > 0;
   const stageTransform = `scale(${PREVIEW_BASE_SCALE * zoom})`;
 
   return (
     <div
       ref={frameRef}
-      className="preview-frame has-composite-bg"
+      className="preview-frame has-yacht-bg"
     >
       <div className="preview-toolbar" role="toolbar" aria-label="Model preview controls">
         <button type="button" className="preview-tool" onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))} title="Zoom out" aria-label="Zoom out">
@@ -77,14 +79,23 @@ export function ModelPreview({ bodyType }) {
         style={{ filter: brightness !== 1 ? `brightness(${brightness})` : undefined }}
       >
         <div className={`preview-model-stage view-${view}`} style={{ transform: stageTransform }}>
-          <div className="preview-backdrop" aria-hidden />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="preview-photo-base"
-            src={modelSrc}
-            alt={`${bodyType === 'man' ? 'Male' : 'Female'} crew model`}
-            draggable={false}
-          />
+          <div className={`preview-figure-stack ${hasGarments ? 'has-mannequin' : 'has-photo'}`}>
+            {hasGarments ? (
+              <Mannequin
+                bodyType={bodyType}
+                selectedProducts={selectedProducts}
+                view={view}
+              />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                className="preview-photo-base"
+                src={modelSrc}
+                alt={`${bodyType === 'man' ? 'Male' : 'Female'} crew model`}
+                draggable={false}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "productUrl" TEXT;
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "colourImages" JSONB;

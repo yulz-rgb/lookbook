@@ -20,7 +20,6 @@ const CATEGORY_SHAPE = {
 };
 
 const ADVANCED_FIELDS = [
-  ['sku', 'SKU / product code'],
   ['fabric', 'Fabric / material'],
   ['details', 'Notes / details'],
   ['sizeRange', 'Size range'],
@@ -276,7 +275,7 @@ export function ProductEditor({
             >
               <ChevronDown size={16} className={showAdvanced ? 'open' : ''} />
               Advanced options
-              <span className="advanced-toggle-hint">brand, SKU, fabric, lead time…</span>
+              <span className="advanced-toggle-hint">brand, fabric, lead time…</span>
             </button>
 
             {showAdvanced && (

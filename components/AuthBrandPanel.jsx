@@ -5,7 +5,7 @@ const VALUE_POINTS = [
   ['Captains', 'Review crew readiness and sign off before anything is ordered.'],
   ['Chief stewardess', 'Build looks, manage crew sizing, and export supplier orders fast.'],
   ['Crew', 'See your assigned uniform and confirm your sizes in seconds.'],
-  ['Suppliers', 'Receive clean, per-supplier purchase orders with SKUs and quantities.'],
+  ['Suppliers', 'Receive clean, per-supplier purchase orders with quantities.'],
 ];
 
 export function AuthBrandPanel() {
@@ -31,7 +31,7 @@ export function AuthBrandPanel() {
       <p className="auth-brand-foot">
         Invite-only. Each yacht&rsquo;s data is isolated and private.
         {' '}
-        <a href="/demo" style={{ color: 'var(--gold)', fontWeight: 800 }}>Try the demo</a> without signing in.
+        <a href="/demo" className="auth-brand-link">Try the demo</a> without signing in.
       </p>
     </aside>
   );

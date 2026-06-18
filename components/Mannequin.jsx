@@ -3,29 +3,53 @@
 // Mannequin preview with layered garment shapes. Falls back to a CSS shape when
 // a product has no real image; uses the product photo when imageUrl is present.
 
+const HINT_ALIASES = {
+  'chef-jacket': 'chef-jacket',
+  engineering: 'overalls',
+  epaulettes: 'epaulettes',
+};
+
+function resolveGarmentHint(product) {
+  const raw = product.imageHint || product.category;
+  return HINT_ALIASES[raw] || raw;
+}
+
+function garmentProps(product, fill, stroke) {
+  const hasPhoto = Boolean(product.imageUrl);
+  return {
+    className: `garment${hasPhoto ? ' has-photo' : ''}`,
+    style: { background: fill, borderColor: stroke },
+  };
+}
+
 export function GarmentShape({ product, showLabel = false }) {
   if (!product) return null;
   const fill = product.swatch || '#ffffff';
   const stroke = product.accent || '#0b1f3a';
-  const hint = product.imageHint || product.category;
+  const hint = resolveGarmentHint(product);
   const label = product.name?.split(' ').slice(0, 2).join(' ');
   const imageOverlay = product.imageUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img className="garment-photo" src={product.imageUrl} alt={product.name || ''} />
   ) : null;
+  const gp = garmentProps(product, fill, stroke);
+  const labelEl = showLabel && !product.imageUrl ? <span>{label}</span> : null;
   const shapes = {
-    polo: <div className="garment polo" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
-    dress: <div className="garment dress" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
-    shirt: <div className="garment shirt" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
-    jacket: <div className="garment jacket" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
-    shorts: <div className="garment shorts" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
-    skort: <div className="garment skort" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
-    trousers: <div className="garment trousers" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
-    shoes: <><div className="garment shoe left" style={{ background: fill, borderColor: stroke }}>{product.imageUrl && imageOverlay}</div><div className="garment shoe right" style={{ background: fill, borderColor: stroke }} /></>,
-    cap: <div className="garment cap" style={{ background: fill, borderColor: stroke }}>{imageOverlay}</div>,
-    belt: <div className="garment belt" style={{ background: fill, borderColor: stroke }} />,
+    polo: <div {...gp} className={`${gp.className} polo`}>{imageOverlay}{labelEl}</div>,
+    dress: <div {...gp} className={`${gp.className} dress`}>{imageOverlay}{labelEl}</div>,
+    shirt: <div {...gp} className={`${gp.className} shirt`}>{imageOverlay}{labelEl}</div>,
+    jacket: <div {...gp} className={`${gp.className} jacket`}>{imageOverlay}{labelEl}</div>,
+    'chef-jacket': <div {...gp} className={`${gp.className} chef-jacket`}>{imageOverlay}{labelEl}</div>,
+    overalls: <div {...gp} className={`${gp.className} overalls`}>{imageOverlay}{labelEl}</div>,
+    epaulettes: <div {...gp} className={`${gp.className} epaulettes`} style={{ ...gp.style, '--epaulette': stroke }}>{imageOverlay}{labelEl}</div>,
+    shorts: <div {...gp} className={`${gp.className} shorts`}>{imageOverlay}{labelEl}</div>,
+    skort: <div {...gp} className={`${gp.className} skort`}>{imageOverlay}{labelEl}</div>,
+    trousers: <div {...gp} className={`${gp.className} trousers`}>{imageOverlay}{labelEl}</div>,
+    shoes: <><div className={`garment shoe left${product.imageUrl ? ' has-photo' : ''}`} style={{ background: fill, borderColor: stroke }}>{product.imageUrl && imageOverlay}</div><div className="garment shoe right" style={{ background: fill, borderColor: stroke }} /></>,
+    cap: <div {...gp} className={`${gp.className} cap`}>{imageOverlay}</div>,
+    belt: <div {...gp} className={`${gp.className} belt`} />,
   };
-  return shapes[hint] || <div className="garment polo" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>;
+  return shapes[hint] || <div {...gp} className={`${gp.className} polo`}>{imageOverlay}{labelEl}</div>;
 }
 
 export function Mannequin({ bodyType, selectedProducts, compact = false, view = 'front', overlayOnly = false }) {

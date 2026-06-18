@@ -69,13 +69,13 @@ npm run build
 
 ## Catalog import
 
-Import real supplier data via the in-app "Import Catalog CSV" button. Template: `docs/catalog-template.csv`. List columns (`colours`, `fit`, `roleTags`) accept `|` or `,` separators. Rows are validated (Zod) with a preview before persisting; SKUs are matched within the yacht for create-vs-update.
+Import real supplier data via the in-app "Import Catalog CSV" button. Template: `docs/catalog-template.csv`. List columns (`colours`, `fit`, `roleTags`) accept `|` or `,` separators. Rows are validated (Zod) with a preview before persisting; products are matched by name within the yacht for create-vs-update.
 
 ## Procurement features
 
 - Budget includes garments, embroidery/logo, spare allowance, per-product VAT, flat shipping, and one-off setup.
 - Supplier purchase order aggregates quantities across crew and sets (with spare), flags below-MOQ lines.
-- Procurement checks surface missing sizes, fit/body mismatches, missing SKUs, and MOQ violations.
+- Procurement checks surface missing sizes, fit/body mismatches, and MOQ violations.
 - Approval workflow: Draft → Captain review → Owner approval → Approved, with a locked totals snapshot.
 
 ## Testing

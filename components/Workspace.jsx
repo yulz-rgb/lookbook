@@ -51,7 +51,7 @@ const NAV_ICONS = {
 };
 const LOCAL_KEY = 'yachtUniform.workspace.v5';
 const CATALOG_VERSION_KEY = 'yachtUniform.catalogVersion';
-const CATALOG_VERSION = 'marina-v6-colour-images';
+const CATALOG_VERSION = 'marina-v7-persist-imports';
 const ORDER_HISTORY_KEY = 'yachtUniform.orders.v1';
 
 const DEFAULT_SETTINGS = {
@@ -152,8 +152,16 @@ function matchesSubFilter(product, subFilter) {
   return hay.includes(term);
 }
 
-function isStaleLocalCatalog(storedProducts = []) {
-  return !storedProducts.length || storedProducts.length < 50;
+function isLegacyBootstrapCatalog(storedProducts = []) {
+  if (!storedProducts.length) return false;
+  const legacyNames = new Set([
+    'technical crew polo',
+    'linen resort shirt',
+    'service dress',
+    'logo crew cap',
+  ]);
+  const hits = storedProducts.filter((p) => legacyNames.has(String(p.name || '').toLowerCase())).length;
+  return hits >= 3 && !storedProducts.some((p) => p.id?.startsWith('marina-'));
 }
 
 function normalizeImportedProduct(product) {
@@ -250,7 +258,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
         const data = JSON.parse(raw);
         let nextProducts = data.products;
         if (nextProducts?.length) {
-          if (isStaleLocalCatalog(nextProducts)) {
+          if (isLegacyBootstrapCatalog(nextProducts)) {
             nextProducts = defaultProducts;
           } else {
             nextProducts = enrichProductsWithDefaults(nextProducts, defaultProducts);
@@ -442,11 +450,13 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     setLooks([...looks, newLook]); setActiveLookId(newLook.id);
   }
 
-  function mergeImportedProducts(imported) {
+  function mergeImportedProducts(imported, { replace = false } = {}) {
+    const normalized = imported.map(normalizeImportedProduct);
     setProducts((prev) => {
+      if (replace) return normalized;
       const byName = new Map(prev.map((p) => [p.name.toLowerCase(), p]));
       const next = [...prev];
-      for (const p of imported) {
+      for (const p of normalized) {
         const existing = p.name ? byName.get(p.name.toLowerCase()) : null;
         if (existing) {
           const idx = next.findIndex((x) => x.id === existing.id);
@@ -603,13 +613,16 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     <main className="dashboard">
       {isDemo && (
         <div className="demo-banner no-print">
-          Demo mode — {products.length} Marina Yacht Wear items loaded. Data saves to this browser only.
-          {' '}
-          <button type="button" className="demo-banner-btn" onClick={resetDemo}>Reload catalog</button>
-          {' '}
-          <button type="button" className="demo-banner-btn primary" onClick={() => setShowImport(true)}>Import supplier catalog</button>
-          {' '}
-          <a href="/sign-in" style={{ color: 'inherit', fontWeight: 900 }}>Sign in</a> for multi-yacht persistence.
+          <span className="demo-banner-tag">Demo</span>
+          <span className="demo-banner-text">
+            {products.length} Marina Yacht Wear items loaded. Data saves to this browser only.
+          </span>
+          <div className="demo-banner-actions">
+            <button type="button" className="demo-banner-btn" onClick={resetDemo}>Reload catalog</button>
+            <button type="button" className="demo-banner-btn primary" onClick={() => setShowImport(true)}>Import supplier catalog</button>
+            <a href="/sign-in" className="demo-banner-link">Sign in</a>
+            <span className="demo-banner-note">for multi-yacht persistence</span>
+          </div>
         </div>
       )}
 
@@ -619,7 +632,10 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             <Menu size={16} />
           </button>
           <div className="brand-mark"><Anchor size={16} /></div>
-          <span className="topbar-title">Yacht Uniform Lookbook</span>
+          <div className="topbar-brand-text">
+            <span className="topbar-title">Yacht Uniform Lookbook</span>
+            <span className="topbar-tagline">Crew uniform planning</span>
+          </div>
         </div>
         <div className="topbar-actions">
           {mode === 'server' && authInfo?.yachts?.length > 0 && (
@@ -783,7 +799,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                 {compareIds.includes(l.id) && <span className="dot" />}
               </button>
             ))}
-            <p style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', padding: '4px 12px' }}>Shift+click look to compare (select up to 4)</p>
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', padding: '6px 12px 0', margin: 0, lineHeight: 1.4 }}>Shift+click look to compare (up to 4)</p>
           </div>
 
           <div className="nav-section nav-section--uniform">
@@ -857,6 +873,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               <div className="preview-look-name">Current Look: {activeLook.name}</div>
               <ModelPreview
                 bodyType={activeLook.bodyType}
+                selectedProducts={selectedProducts}
               />
               <div className="preview-stats">
                 <div className="preview-stats-item">

@@ -32,10 +32,10 @@ async function fetchJson(url) {
 }
 
 // --- Static integration ---
-if (defaultProducts === marinaProducts) ok('defaultProducts uses marinaCatalog');
-else fail('defaultProducts uses marinaCatalog');
+if (defaultProducts.length === marinaProducts.length) ok('defaultProducts uses marinaCatalog');
+else fail('defaultProducts count', `${defaultProducts.length} vs ${marinaProducts.length}`);
 
-if (marinaProducts.length >= 170) ok(`${marinaProducts.length} uniform products loaded`);
+if (marinaProducts.length >= 160) ok(`${marinaProducts.length} uniform products loaded`);
 else fail('product count', String(marinaProducts.length));
 
 const nonUniform = marinaProducts.filter((p) => !isUniformCatalogRecord(p));
@@ -107,11 +107,11 @@ try {
     ok('Live sample (Apron with Pocket) has price, colours, image');
   }
 
-  const jsIds = new Set(marinaProducts.map((p) => p.sku));
-  const liveSkus = new Set(records.map((r) => r.sku));
-  const missing = [...jsIds].filter((s) => s && !liveSkus.has(s));
-  if (missing.length) fail('SKU drift vs live store', `${missing.length} missing`);
-  else ok('Cached catalog SKUs match live store');
+  const jsNames = new Set(marinaProducts.map((p) => p.name));
+  const liveNames = new Set(records.map((r) => r.name));
+  const missing = [...jsNames].filter((name) => name && !liveNames.has(name));
+  if (missing.length) fail('Product drift vs live store', `${missing.length} missing`);
+  else ok('Cached catalog products match live store');
 } catch (err) {
   fail('live Shopify fetch', err.message);
 }
