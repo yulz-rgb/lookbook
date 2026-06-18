@@ -9,6 +9,9 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:collapse": "node scripts/test-uniform-collapse.mjs",
+    "catalog:marina": "node scripts/fetch-marina-catalog.mjs",
+    "catalog:verify": "node scripts/verify-marina-catalog.mjs",
     "test:watch": "vitest",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
@@ -29,6 +32,8 @@
     "lucide-react": "1.21.0",
     "next": "16.2.9",
     "papaparse": "^5.5.3",
+    "pdf-parse": "^1.1.1",
+    "playwright": "^1.52.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "zod": "^4.1.12"

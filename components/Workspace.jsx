@@ -2,18 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Anchor, Download, FileDown, FileText, Filter, Menu, Plus,
-  RotateCw, Search, Settings, Ship, SlidersHorizontal, Sun, Trash2, Upload,
-  Wand2, X, ZoomIn, AlertTriangle, CheckCircle2, PanelRight,
+  Anchor, ChevronDown, Download, FileDown, FileText, Filter, Menu, Plus,
+  Search, Settings, Ship, SlidersHorizontal, Trash2, Upload,
+  Wand2, X, CheckCircle2, PanelRight,
   Users, Lock,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
   categories, defaultCrew, defaultLooks, defaultProducts, bodyTypes, roles,
-  navCategories, NAV_SECTION_LABELS, vessels, isDemoCatalog, productMatchesNav,
+  navCategories, NAV_SECTION_LABELS, vessels, isDemoCatalog, productMatchesNav, catalogNavForProduct, DEMO_SKUS,
 } from '../lib/catalog';
-import { normalizeCrewMember, memberSets } from '../lib/crew';
+import { normalizeCrewMember } from '../lib/crew';
 import { capabilitiesFor, canAdvance, STAGE_ACTOR } from '../lib/permissions';
 import { Mannequin } from './Mannequin';
 import { ModelPreview } from './ModelPreview';
@@ -25,7 +25,7 @@ import { CrewImport } from './CrewImport';
 import { TeamPanel } from './TeamPanel';
 import {
   money, buildLookTotals, computeBudget, buildOrderSummary, buildSizeAwareOrderSummary,
-  validateOrder, indexById, compareLooks,
+  indexById, compareLooks,
 } from '../lib/calc';
 import { buildSupplierOrderCsv } from '../lib/csv';
 import {
@@ -46,12 +46,14 @@ const NAV_ICONS = {
   outerwear: '🌧️',
   accessories: '🧢',
 };
-const LOCAL_KEY = 'yachtUniform.workspace.v4';
+const LOCAL_KEY = 'yachtUniform.workspace.v5';
+const CATALOG_VERSION_KEY = 'yachtUniform.catalogVersion';
+const CATALOG_VERSION = 'marina-195';
 const ORDER_HISTORY_KEY = 'yachtUniform.orders.v1';
 
 const DEFAULT_SETTINGS = {
   vessel: vessels[0],
-  priceNote: 'Demo prices only — replace with current supplier quotes before ordering.',
+  priceNote: 'Marina Yacht Wear catalog prices — confirm quotes before ordering.',
   currency: 'EUR',
   logoCost: 15,
   sparePercent: 10,
@@ -70,6 +72,32 @@ const DEFAULT_ADVANCED_FILTERS = {
   maxLeadDays: '',
   moqFriendly: false,
 };
+
+function createEmptyProduct(currency = 'EUR') {
+  return {
+    id: uid('product'),
+    category: 'tops',
+    name: '',
+    brand: '',
+    sku: '',
+    price: 0,
+    currency,
+    vatRate: 0,
+    colours: ['White'],
+    swatch: '#ffffff',
+    accent: '#0b1f3a',
+    fabric: '',
+    details: '',
+    fit: ['woman', 'man'],
+    roleTags: [],
+    leadTime: '',
+    minOrder: 1,
+    sizeRange: '',
+    imageHint: 'polo',
+    imageUrl: '',
+    active: true,
+  };
+}
 
 function normalizeCrewList(crew = [], looks = []) {
   const lookNameToId = new Map(looks.map((l) => [l.name, l.id]));
@@ -122,6 +150,23 @@ function matchesSubFilter(product, subFilter) {
   return hay.includes(term);
 }
 
+function isStaleLocalCatalog(storedProducts = []) {
+  if (!storedProducts.length) return true;
+  if (storedProducts.length < 50) return true;
+  const demoHits = storedProducts.filter((p) => p.sku && DEMO_SKUS.has(p.sku)).length;
+  return demoHits >= 3;
+}
+
+function normalizeImportedProduct(product) {
+  return {
+    ...product,
+    id: product.id || uid('product'),
+    currency: product.currency === 'EUR' ? '€' : product.currency,
+    fit: product.fit?.length ? product.fit : ['woman', 'man'],
+    colours: product.colours || [],
+  };
+}
+
 function parseLeadDays(leadTime) {
   const m = String(leadTime || '').match(/(\d+)/);
   return m ? Number(m[1]) : null;
@@ -146,13 +191,15 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
 
   const [activeLookId, setActiveLookId] = useState((initialData?.looks?.[0] || defaultLooks[0]).id);
   const [activeNavCat, setActiveNavCat] = useState('bridge');
+  const [expandedNavCat, setExpandedNavCat] = useState('bridge');
+  const [uniformNavOpen, setUniformNavOpen] = useState(true);
   const [subFilter, setSubFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [catalogView, setCatalogView] = useState('grid');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState(DEFAULT_ADVANCED_FILTERS);
-  const [roleFilter, setRoleFilter] = useState('interior');
+  const [roleFilter, setRoleFilter] = useState('');
   const [compareIds, setCompareIds] = useState([]);
   const [editProduct, setEditProduct] = useState({ ...defaultProducts[0] });
   const [showAdmin, setShowAdmin] = useState(false);
@@ -162,7 +209,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const [showApprovals, setShowApprovals] = useState(false);
   const [showTeam, setShowTeam] = useState(false);
   const [hideBg, setHideBg] = useState(false);
-  const [showCrewMgmt, setShowCrewMgmt] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [saveState, setSaveState] = useState('idle');
@@ -177,39 +223,35 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const pdfRef = useRef(null);
   const saveTimer = useRef(null);
 
+  function toggleUniformNav() {
+    if (uniformNavOpen) setExpandedNavCat(null);
+    setUniformNavOpen((open) => !open);
+  }
+
+  function toggleNavCategory(catId) {
+    if (expandedNavCat === catId) {
+      setExpandedNavCat(null);
+      return;
+    }
+    setActiveNavCat(catId);
+    setExpandedNavCat(catId);
+    setSubFilter('All');
+  }
+
   useEffect(() => {
     if (mode !== 'local') return;
     try {
-      const catalogVersion = window.localStorage.getItem(CATALOG_VERSION_KEY);
       const raw = window.localStorage.getItem(LOCAL_KEY);
-      const needsMarinaCatalog = catalogVersion !== CATALOG_VERSION;
-
-      if (needsMarinaCatalog) {
-        /* eslint-disable react-hooks/set-state-in-effect */
-        setProducts(defaultProducts);
-        setLooks(defaultLooks);
-        setCrew(normalizeCrewList(defaultCrew, defaultLooks));
-        setSettings((s) => ({ ...DEFAULT_SETTINGS, ...s, priceNote: DEFAULT_SETTINGS.priceNote }));
-        setActiveLookId(defaultLooks[0].id);
-        window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
-        /* eslint-enable react-hooks/set-state-in-effect */
-      } else if (raw) {
+      if (raw) {
         const data = JSON.parse(raw);
-        if (isStaleLocalCatalog(data.products)) {
-          setProducts(defaultProducts);
-          setLooks(defaultLooks);
-          setCrew(normalizeCrewList(defaultCrew, defaultLooks));
-          setActiveLookId(defaultLooks[0].id);
-        } else {
-          /* eslint-disable react-hooks/set-state-in-effect */
-          if (data.products?.length) setProducts(data.products);
-          if (data.looks?.length) setLooks(data.looks);
-          if (data.crew?.length) setCrew(normalizeCrewList(data.crew, data.looks || looks));
-          if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
-          if (data.orderHistory) setOrderHistory(data.orderHistory);
-          if (data.approvalLog) setApprovalLog(data.approvalLog);
-          /* eslint-enable react-hooks/set-state-in-effect */
-        }
+        /* eslint-disable react-hooks/set-state-in-effect */
+        if (data.products) setProducts(data.products);
+        if (data.looks) setLooks(data.looks);
+        if (data.crew) setCrew(normalizeCrewList(data.crew, data.looks || looks));
+        if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+        if (data.orderHistory) setOrderHistory(data.orderHistory);
+        if (data.approvalLog) setApprovalLog(data.approvalLog);
+        /* eslint-enable react-hooks/set-state-in-effect */
       }
       const ordersRaw = window.localStorage.getItem(ORDER_HISTORY_KEY);
       if (ordersRaw) setOrderHistory(JSON.parse(ordersRaw));
@@ -288,10 +330,8 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const budget = useMemo(() => computeBudget(crew, lookTotals, settings), [crew, lookTotals, settings]);
   const orderSummary = useMemo(() => buildOrderSummary(crew, looks, products, settings), [crew, looks, products, settings]);
   const sizeAwareOrder = useMemo(() => buildSizeAwareOrderSummary(crew, looks, products, settings), [crew, looks, products, settings]);
-  const warnings = useMemo(() => validateOrder(crew, looks, products, settings), [crew, looks, products, settings]);
   const compareData = useMemo(() => compareLooks(compareIds, looks, products), [compareIds, looks, products]);
   const fmt = (v) => money(v, settings.currency);
-  const errorCount = warnings.filter((w) => w.level === 'error').length;
 
   function num(v) { return Number(v) || 0; }
 
@@ -327,20 +367,39 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     const normalised = {
       ...editProduct,
       id: editProduct.id || uid('product'),
+      name: String(editProduct.name || '').trim(),
       price: Number(editProduct.price || 0),
       fit: editProduct.fit?.length ? editProduct.fit : ['woman', 'man'],
     };
-    setProducts(products.some((p) => p.id === normalised.id)
-      ? products.map((p) => (p.id === normalised.id ? normalised : p))
-      : [...products, normalised]);
-    setEditProduct(normalised);
+    const isNew = !products.some((p) => p.id === normalised.id);
+    setProducts((prev) => (prev.some((p) => p.id === normalised.id)
+      ? prev.map((p) => (p.id === normalised.id ? normalised : p))
+      : [normalised, ...prev]));
+    if (isNew) {
+      setSubFilter('All');
+      setSearch('');
+      const navId = catalogNavForProduct(normalised);
+      setActiveNavCat(navId);
+      setExpandedNavCat(navId);
+    }
+    setShowAdmin(false);
+  }
+
+  function openAddProduct() {
+    setEditProduct(createEmptyProduct(settings.currency));
+    setShowAdmin(true);
+  }
+
+  function openEditProduct(prod) {
+    setEditProduct(prod);
+    setShowAdmin(true);
   }
 
   function deleteProduct() {
     if (!editProduct.id) return;
     setProducts(products.filter((p) => p.id !== editProduct.id));
     setLooks(looks.map((l) => ({ ...l, productIds: l.productIds.filter((id) => id !== editProduct.id) })));
-    setEditProduct({ ...defaultProducts[0], id: uid('product'), name: 'New product' });
+    setShowAdmin(false);
   }
 
   function addLook() {
@@ -348,47 +407,17 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     setLooks([...looks, newLook]); setActiveLookId(newLook.id);
   }
 
-  function addCrewRow() {
-    setCrew([...crew, normalizeCrewMember({
-      id: uid('crew'), name: 'New Crew', role: 'interior', bodyType: 'woman',
-      topSize: '', bottomSize: '', shoeSize: '',
-      assignedLooks: [activeLook.id], assignedLook: activeLook.id,
-    })]);
-  }
-
-  function updateCrew(id, patch) {
-    setCrew(crew.map((c) => (c.id === id ? normalizeCrewMember({ ...c, ...patch }) : c)));
-  }
-
-  function toggleCrewLook(crewId, lookId) {
-    setCrew(crew.map((c) => {
-      if (c.id !== crewId) return c;
-      const current = c.assignedLooks || (c.assignedLook ? [c.assignedLook] : []);
-      const next = current.includes(lookId) ? current.filter((x) => x !== lookId) : [...current, lookId];
-      return normalizeCrewMember({ ...c, assignedLooks: next, assignedLook: next[0] || '' });
-    }));
-  }
-
-  function deleteCrew(id) { setCrew(crew.filter((c) => c.id !== id)); }
-
-  function mergeImportedProducts(imported, { replace = false } = {}) {
-    const bulkReplace = replace || imported.length >= 100;
-    if (bulkReplace) {
-      setProducts(imported.map(normalizeImportedProduct));
-      setShowImport(false);
-      return;
-    }
+  function mergeImportedProducts(imported) {
     setProducts((prev) => {
       const bySku = new Map(prev.filter((p) => p.sku).map((p) => [p.sku, p]));
       const next = [...prev];
       for (const p of imported) {
-        const normalised = normalizeImportedProduct(p);
-        const existing = normalised.sku ? bySku.get(normalised.sku) : null;
+        const existing = p.sku ? bySku.get(p.sku) : null;
         if (existing) {
           const idx = next.findIndex((x) => x.id === existing.id);
-          next[idx] = { ...existing, ...normalised, id: existing.id };
+          next[idx] = { ...existing, ...p, id: existing.id };
         } else {
-          next.push(normalised);
+          next.push(p);
         }
       }
       return next;
@@ -539,7 +568,11 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     <main className="dashboard">
       {isDemo && (
         <div className="demo-banner no-print">
-          Demo mode — try the full lookbook without signing in. Data saves to this browser only.
+          Demo mode — {products.length} Marina Yacht Wear items loaded. Data saves to this browser only.
+          {' '}
+          <button type="button" className="demo-banner-btn" onClick={resetDemo}>Reload catalog</button>
+          {' '}
+          <button type="button" className="demo-banner-btn primary" onClick={() => setShowImport(true)}>Import supplier catalog</button>
           {' '}
           <a href="/sign-in" style={{ color: 'inherit', fontWeight: 900 }}>Sign in</a> for multi-yacht persistence.
         </div>
@@ -551,9 +584,8 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             <Menu size={16} />
           </button>
           <div className="brand-mark"><Anchor size={16} /></div>
-          <span className="brand-name">YACHT CO.</span>
+          <span className="topbar-title">Yacht Uniform Lookbook</span>
         </div>
-        <div className="topbar-title">Yacht Uniform Lookbook</div>
         <div className="topbar-actions">
           {mode === 'server' && authInfo?.yachts?.length > 0 && (
             <select className="topbar-select" value={authInfo.activeYachtId} onChange={(e) => switchYacht(e.target.value)} aria-label="Active yacht">
@@ -580,6 +612,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
           <button type="button" className="topbar-btn mobile-panel-toggle icon-only" onClick={() => setRightPanelOpen((o) => !o)} aria-label="Open budget panel">
             <PanelRight size={16} />
           </button>
+          <button type="button" className="topbar-btn primary-topbar" onClick={() => setShowImport(true)}><Upload size={14} /> Import catalog</button>
           <button type="button" className="topbar-btn gold" onClick={downloadPdf}><Download size={14} /> Export PDF</button>
           <button type="button" className="topbar-btn" onClick={exportCsv}><FileDown size={14} /> Export CSV</button>
           {mode === 'server' && caps.canManageMembers && (
@@ -718,21 +751,50 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             <p style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', padding: '4px 12px' }}>Shift+click look to compare (select up to 4)</p>
           </div>
 
-          <div className="nav-section">
-            <div className="nav-section-title"><span className="num">3</span> Uniform</div>
-            {navCategories.map((nc, i) => {
+          <div className="nav-section nav-section--uniform">
+            <button
+              type="button"
+              className="nav-section-title nav-section-toggle"
+              onClick={toggleUniformNav}
+              aria-expanded={uniformNavOpen}
+            >
+              <span className="num">3</span> Uniform
+              {!uniformNavOpen && <span className="nav-section-count">{navCategories.length}</span>}
+              <ChevronDown size={13} className={`nav-section-chevron ${uniformNavOpen ? 'open' : ''}`} aria-hidden />
+            </button>
+            {uniformNavOpen && navCategories.map((nc, i) => {
               const prev = navCategories[i - 1];
               const showLabel = nc.section && nc.section !== prev?.section;
+              const isExpanded = expandedNavCat === nc.id;
+              const hasSubcats = nc.subFilters.length > 1;
               return (
                 <div key={nc.id}>
                   {showLabel && (
                     <div className="nav-subsection-label">{NAV_SECTION_LABELS[nc.section]}</div>
                   )}
                   <button type="button" className={`nav-cat-btn ${activeNavCat === nc.id ? 'active' : ''}`}
-                    onClick={() => { setActiveNavCat(nc.id); setSubFilter('All'); }}>
+                    onClick={() => toggleNavCategory(nc.id)}
+                    aria-expanded={hasSubcats ? isExpanded : undefined}>
                     <span className="nav-cat-icon">{NAV_ICONS[nc.id]}</span>
                     <span className="nav-cat-label">{nc.label}</span>
+                    {hasSubcats && (
+                      <ChevronDown size={12} className={`nav-cat-chevron ${isExpanded ? 'open' : ''}`} aria-hidden />
+                    )}
                   </button>
+                  {isExpanded && hasSubcats && (
+                    <div className="nav-subcat-list" role="group" aria-label={`${nc.label} categories`}>
+                      {nc.subFilters.map((sub) => (
+                        <button
+                          key={sub}
+                          type="button"
+                          className={`nav-subcat-btn ${subFilter === sub ? 'active' : ''}`}
+                          onClick={() => setSubFilter(sub)}
+                        >
+                          {sub}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -783,8 +845,20 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             <section className="catalog-panel no-print">
               <div className="catalog-header">
                 <div className="catalog-title-row">
-                  <h2>{activeNav.label} <span className="result-count">{filteredProducts.length}</span></h2>
+                  <h2>
+                    {activeNav.label}
+                    {subFilter !== 'All' && (
+                      <span className="catalog-breadcrumb"> › {subFilter}</span>
+                    )}
+                    <span className="result-count">{filteredProducts.length}</span>
+                  </h2>
                   <div className="catalog-controls">
+                    <button type="button" className="btn primary add-product-btn" onClick={() => setShowImport(true)}>
+                      <Upload size={14} /> Import catalog
+                    </button>
+                    <button type="button" className="btn ghost add-product-btn" onClick={openAddProduct}>
+                      <Plus size={14} /> Add one
+                    </button>
                     <label className="sort-label" htmlFor="sort-select">Sort:</label>
                     <select id="sort-select" className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                       <option value="newest">Newest</option>
@@ -797,9 +871,14 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                   </div>
                 </div>
                 <div className="catalog-filters">
-                  {activeNav.subFilters.map((f) => (
-                    <button key={f} type="button" className={`filter-chip ${subFilter === f ? 'active' : ''}`} onClick={() => setSubFilter(f)}>{f}</button>
+                  {activeNav.subFilters.map((sub) => (
+                    <button key={sub} type="button" className={`filter-chip ${subFilter === sub ? 'active' : ''}`}
+                      onClick={() => setSubFilter(sub)}>
+                      {sub}
+                    </button>
                   ))}
+                </div>
+                <div className="catalog-filters">
                   <select className="sort-select" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} aria-label="Filter by role">
                     <option value="">All roles</option>
                     {roles.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
@@ -837,7 +916,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                   <div className="catalog-grid">
                     {filteredProducts.map((p) => (
                       <ProductCard key={p.id} product={p} isSelected={activeLook.productIds.includes(p.id)}
-                        onToggle={toggleProduct} onEdit={(prod) => { setEditProduct(prod); setShowAdmin(true); }} />
+                        onToggle={toggleProduct} onEdit={openEditProduct} />
                     ))}
                   </div>
                 ) : (
@@ -845,13 +924,26 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                     {filteredProducts.map((p) => (
                       <ProductListRow key={p.id} product={p} isSelected={activeLook.productIds.includes(p.id)}
                         roleMatch={productMatchesRole(p, roleFilter)}
-                        onToggle={toggleProduct} onEdit={(prod) => { setEditProduct(prod); setShowAdmin(true); }} />
+                        onToggle={toggleProduct} onEdit={openEditProduct} />
                     ))}
                   </div>
                 )}
                 {filteredProducts.length === 0 && (
                   <div className="catalog-empty">
-                    <p>No products match your filters.</p>
+                    <div className="catalog-empty-icon">👕</div>
+                    {products.length > 0 ? (
+                      <>
+                        <p>No products match this department and active look ({activeLook?.bodyType === 'man' ? 'Male' : 'Female'}).</p>
+                        <p className="import-hint">Try Bridge, Deck, or Interior — or switch the look body type. Catalog has {products.length} items total.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>No products here yet.</p>
+                        <button type="button" className="btn primary" onClick={() => setShowImport(true)}><Upload size={14} /> Import supplier catalog</button>
+                        <button type="button" className="btn ghost" onClick={resetDemo} style={{ marginTop: 8 }}>Load Marina Yacht Wear catalog</button>
+                        <button type="button" className="btn ghost" onClick={openAddProduct} style={{ marginTop: 8 }}><Plus size={14} /> Or add one manually</button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -879,94 +971,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                 <div className="grand-total-box"><span>Grand Total</span><strong>{fmt(budget.grandTotal)}</strong></div>
               </div>
 
-              {warnings.length > 0 && (
-                <div className="panel-block">
-                  <h3>Procurement Checks <span className={`result-count ${errorCount ? 'danger' : ''}`}>{warnings.length}</span></h3>
-                  <div className="warning-list">
-                    {warnings.slice(0, 12).map((w, i) => (
-                      <div key={i} className={`warning-item ${w.level}`}>
-                        <AlertTriangle size={12} /> {w.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="panel-block" style={{ flex: 1 }}>
-                <h3>Crew Order Matrix <span style={{ float: 'right', textTransform: 'none', letterSpacing: 0 }}>{crew.length}</span></h3>
-                <div className="crew-table-wrap">
-                  <table className="crew-table">
-                    <thead><tr><th>Name</th><th>Role</th><th>Sizes</th><th>Looks</th><th>Sets</th><th>Total</th></tr></thead>
-                    <tbody>
-                      {crew.slice(0, showCrewMgmt ? crew.length : 5).map((c) => {
-                        const row = budget.rows.find((r) => r.id === c.id);
-                        return (
-                          <tr key={c.id}>
-                            <td>
-                              {c.name}
-                              {!c.sizeConfirmed && <span title="Unconfirmed" style={{ color: 'var(--gold-dark)' }}> *</span>}
-                            </td>
-                            <td>{roles.find((r) => r.id === c.role)?.label || c.role}</td>
-                            <td style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{c.topSize}/{c.bottomSize}/{c.shoeSize}</td>
-                            <td style={{ fontSize: 10 }}>{(c.assignedLooks || []).length || 1} look(s)</td>
-                            <td>{memberSets(c, settings)}</td>
-                            <td className="total-cell">{fmt(row?.total || 0)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="panel-actions">
-                  <button type="button" className="panel-btn" onClick={exportCsv}><FileDown size={13} /> Export CSV</button>
-                  <button type="button" className="panel-btn" onClick={() => setShowCrewImport(true)}><Upload size={13} /> Import crew</button>
-                  <button type="button" className="panel-btn primary" onClick={() => setShowCrewMgmt((s) => !s)}>
-                    <Plus size={13} /> {showCrewMgmt ? 'Collapse' : 'Manage crew'}
-                  </button>
-                </div>
-                {showCrewMgmt && (
-                  <div style={{ marginTop: 10 }}>
-                    {crew.map((c) => (
-                      <div key={c.id} className="crew-detail-card">
-                        <h4>
-                          <input className="text-input" style={{ width: 'auto', flex: 1 }} value={c.name} onChange={(e) => updateCrew(c.id, { name: e.target.value })} />
-                          <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <input type="checkbox" checked={c.sizeConfirmed} onChange={(e) => updateCrew(c.id, { sizeConfirmed: e.target.checked })} />
-                            Confirmed
-                          </label>
-                        </h4>
-                        <div className="crew-detail-grid">
-                          <select className="select" value={c.role} onChange={(e) => updateCrew(c.id, { role: e.target.value })}>
-                            {roles.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-                          </select>
-                          <select className="select" value={c.bodyType} onChange={(e) => updateCrew(c.id, { bodyType: e.target.value })}>
-                            {bodyTypes.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
-                          </select>
-                          <input className="text-input" type="number" placeholder="Sets" value={c.setsPerCrew ?? ''} onChange={(e) => updateCrew(c.id, { setsPerCrew: e.target.value ? Number(e.target.value) : null })} />
-                          <input className="text-input" placeholder={`Top (${settings.sizeSystem})`} value={c.topSize} onChange={(e) => updateCrew(c.id, { topSize: e.target.value })} />
-                          <input className="text-input" placeholder={`Bottom (${settings.sizeSystem})`} value={c.bottomSize} onChange={(e) => updateCrew(c.id, { bottomSize: e.target.value })} />
-                          <input className="text-input" placeholder={`Shoe (${settings.sizeSystem})`} value={c.shoeSize} onChange={(e) => updateCrew(c.id, { shoeSize: e.target.value })} />
-                          <input className="text-input" placeholder="Bust/cm" value={c.bust} onChange={(e) => updateCrew(c.id, { bust: e.target.value })} />
-                          <input className="text-input" placeholder="Waist/cm" value={c.waist} onChange={(e) => updateCrew(c.id, { waist: e.target.value })} />
-                          <input className="text-input" placeholder="Height/cm" value={c.height} onChange={(e) => updateCrew(c.id, { height: e.target.value })} />
-                        </div>
-                        <input className="text-input" style={{ marginTop: 8 }} placeholder="Fit notes" value={c.fitNotes} onChange={(e) => updateCrew(c.id, { fitNotes: e.target.value })} />
-                        <input className="text-input" style={{ marginTop: 6 }} placeholder="Alterations / tailoring" value={c.alterations} onChange={(e) => updateCrew(c.id, { alterations: e.target.value })} />
-                        <div className="crew-looks-multi">
-                          {looks.map((l) => (
-                            <button key={l.id} type="button" className={`crew-look-chip ${(c.assignedLooks || []).includes(l.id) ? 'active' : ''}`}
-                              onClick={() => toggleCrewLook(c.id, l.id)}>
-                              {l.name.split('/')[0].trim()}
-                            </button>
-                          ))}
-                        </div>
-                        <button type="button" className="btn danger" style={{ marginTop: 8, padding: '6px 10px' }} onClick={() => deleteCrew(c.id)}><Trash2 size={13} /> Remove</button>
-                      </div>
-                    ))}
-                    <button type="button" className="panel-btn" style={{ width: '100%', marginTop: 6 }} onClick={addCrewRow}><Plus size={13} /> Add crew member</button>
-                  </div>
-                )}
-              </div>
             </aside>
           </div>
 
@@ -1002,11 +1006,11 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               </div>
             </div>
 
-            <div className="bottom-panel">
+            <div className="bottom-panel catalog-mgmt-panel">
               <h4>Catalogue Management</h4>
               <div className="catalogue-mgmt-btns">
-                <button type="button" className="mgmt-btn" onClick={() => setShowAdmin(true)}><Filter size={15} /> Manage Products</button>
-                <button type="button" className="mgmt-btn" onClick={() => setShowImport(true)}><Upload size={15} /> Import Catalog CSV</button>
+                <button type="button" className="mgmt-btn primary-mgmt" onClick={() => setShowImport(true)}><Upload size={15} /> Import catalog</button>
+                <button type="button" className="mgmt-btn" onClick={openAddProduct}><Plus size={15} /> Add one product</button>
                 <button type="button" className="mgmt-btn" onClick={() => setShowCrewImport(true)}><Upload size={15} /> Import Crew CSV</button>
                 <button type="button" className="mgmt-btn" onClick={exportJson}><FileText size={15} /> Export JSON Backup</button>
               </div>
@@ -1016,9 +1020,16 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
       </div>
 
       {showAdmin && (
-        <ProductEditor draft={editProduct} setDraft={setEditProduct} onSave={saveProduct} canUpload={canUpload}
-          onNew={() => setEditProduct({ id: uid('product'), category: 'tops', name: 'New product', brand: '', sku: '', price: 0, currency: settings.currency, vatRate: 0, colours: ['White'], swatch: '#ffffff', accent: '#0b1f3a', fabric: '', details: '', fit: ['woman', 'man'], roleTags: [], leadTime: '', minOrder: 1, sizeRange: '', imageHint: 'polo', imageUrl: '', active: true })}
-          onDelete={deleteProduct} onClose={() => setShowAdmin(false)} />
+        <ProductEditor
+          draft={editProduct}
+          setDraft={setEditProduct}
+          onSave={saveProduct}
+          canUpload={canUpload}
+          isEditing={products.some((p) => p.id === editProduct.id)}
+          onDelete={deleteProduct}
+          onClose={() => setShowAdmin(false)}
+          onOpenImport={() => { setShowAdmin(false); setShowImport(true); }}
+        />
       )}
 
       {showImport && (

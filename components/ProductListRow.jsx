@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from 'lucide-react';
 import { money } from '../lib/calc';
+import { ProductAttribution } from './ProductAttribution';
 
 export function ProductListRow({ product, isSelected, onToggle, onEdit, roleMatch, readOnly = false }) {
   return (
@@ -15,7 +16,7 @@ export function ProductListRow({ product, isSelected, onToggle, onEdit, roleMatc
         )}
       </div>
       <div className="plr-main">
-        <div className="plr-brand">{product.brand}</div>
+        <ProductAttribution product={product} compact />
         <h3>{product.name}</h3>
         <div className="plr-meta">
           <span>{product.fabric?.split(',')[0] || '—'}</span>

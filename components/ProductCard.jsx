@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from 'lucide-react';
 import { money } from '../lib/calc';
+import { ProductAttribution } from './ProductAttribution';
 
 export function ProductCard({ product, isSelected, onToggle, onEdit, readOnly = false }) {
   const imgBg = isSelected
@@ -23,7 +24,7 @@ export function ProductCard({ product, isSelected, onToggle, onEdit, readOnly = 
         </div>
       </div>
       <div className="product-card-body">
-        <div className="brand">{product.brand}</div>
+        <ProductAttribution product={product} />
         <h3>{product.name}</h3>
         <div className="product-price">{money(product.price, product.currency)}</div>
         <div className="color-swatches">
