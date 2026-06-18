@@ -27,24 +27,24 @@ function useLocalData(key, fallback) {
   return [data, setData];
 }
 
-function GarmentShape({ product }) {
+function GarmentShape({ product, showLabel = true }) {
   const fill = product?.swatch || '#ffffff';
   const stroke = product?.accent || '#0b1f3a';
   const hint = product?.imageHint || product?.category;
   const label = product?.name?.split(' ').slice(0, 2).join(' ');
   if (!product) return null;
   const shapes = {
-    dress: <div className="garment dress" style={{ background: fill, borderColor: stroke }}><span>{label}</span></div>,
-    shirt: <div className="garment shirt" style={{ background: fill, borderColor: stroke }}><span>{label}</span></div>,
-    jacket: <div className="garment jacket" style={{ background: fill, borderColor: stroke }}><span>{label}</span></div>,
-    shorts: <div className="garment shorts" style={{ background: fill, borderColor: stroke }}><span>{label}</span></div>,
-    skort: <div className="garment skort" style={{ background: fill, borderColor: stroke }}><span>{label}</span></div>,
-    trousers: <div className="garment trousers" style={{ background: fill, borderColor: stroke }}><span>{label}</span></div>,
+    dress: <div className="garment dress" style={{ background: fill, borderColor: stroke }}>{showLabel && <span>{label}</span>}</div>,
+    shirt: <div className="garment shirt" style={{ background: fill, borderColor: stroke }}>{showLabel && <span>{label}</span>}</div>,
+    jacket: <div className="garment jacket" style={{ background: fill, borderColor: stroke }}>{showLabel && <span>{label}</span>}</div>,
+    shorts: <div className="garment shorts" style={{ background: fill, borderColor: stroke }}>{showLabel && <span>{label}</span>}</div>,
+    skort: <div className="garment skort" style={{ background: fill, borderColor: stroke }}>{showLabel && <span>{label}</span>}</div>,
+    trousers: <div className="garment trousers" style={{ background: fill, borderColor: stroke }}>{showLabel && <span>{label}</span>}</div>,
     shoes: <><div className="garment shoe left" style={{ background: fill, borderColor: stroke }} /><div className="garment shoe right" style={{ background: fill, borderColor: stroke }} /></>,
     cap: <div className="garment cap" style={{ background: fill, borderColor: stroke }} />,
     belt: <div className="garment belt" style={{ background: fill, borderColor: stroke }} />,
   };
-  return shapes[hint] || <div className="garment polo" style={{ background: fill, borderColor: stroke }}><span>{label}</span></div>;
+  return shapes[hint] || <div className="garment polo" style={{ background: fill, borderColor: stroke }}>{showLabel && <span>{label}</span>}</div>;
 }
 
 function Mannequin({ bodyType, selectedProducts, compact = false }) {
@@ -57,13 +57,13 @@ function Mannequin({ bodyType, selectedProducts, compact = false }) {
       <div className="body torso-base" />
       <div className="body arm left" /><div className="body arm right" />
       <div className="body leg left" /><div className="body leg right" />
-      {byCategory.dresses && bodyType === 'woman' ? <GarmentShape product={byCategory.dresses} /> : <>
-        <GarmentShape product={byCategory.tops || byCategory.shirts} />
-        <GarmentShape product={byCategory.bottoms} />
+      {byCategory.dresses && bodyType === 'woman' ? <GarmentShape product={byCategory.dresses} showLabel={!compact} /> : <>
+        <GarmentShape product={byCategory.tops || byCategory.shirts} showLabel={!compact} />
+        <GarmentShape product={byCategory.bottoms} showLabel={!compact} />
       </>}
-      <GarmentShape product={byCategory.outerwear} />
-      <GarmentShape product={byCategory.shoes} />
-      {accessories.map((p) => <GarmentShape key={p.id} product={p} />)}
+      <GarmentShape product={byCategory.outerwear} showLabel={!compact} />
+      <GarmentShape product={byCategory.shoes} showLabel={!compact} />
+      {accessories.map((p) => <GarmentShape key={p.id} product={p} showLabel={!compact} />)}
     </div>
   );
 }
@@ -84,7 +84,9 @@ function ProductCard({ product, isSelected, onToggle, onEdit }) {
     <article className={`product-card ${isSelected ? 'selected' : ''}`}>
       <div className="product-card-image">
         <span className="brand-tag">{product.brand}</span>
-        <Mannequin bodyType={product.fit?.[0] || 'woman'} selectedProducts={[product]} compact />
+        <div className="product-photo">
+          <div className="product-photo-shirt" style={{ background: product.swatch, borderColor: product.accent }} />
+        </div>
       </div>
       <div className="product-card-body">
         <div className="brand">{product.brand}</div>
@@ -170,6 +172,7 @@ export default function Page() {
   const [activeNavCat, setActiveNavCat] = useState('tops-shirts');
   const [subFilter, setSubFilter] = useState('All');
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
   const [logoCost, setLogoCost] = useState(15);
   const [sparePercent, setSparePercent] = useState(10);
   const [setsPerCrew, setSetsPerCrew] = useState(2);
@@ -185,12 +188,17 @@ export default function Page() {
   const activeLook = looks.find((l) => l.id === activeLookId) || looks[0];
   const activeNav = navCategories.find((n) => n.id === activeNavCat) || navCategories[0];
   const selectedProducts = useMemo(() => products.filter((p) => activeLook?.productIds?.includes(p.id)), [products, activeLook]);
-  const filteredProducts = useMemo(() => products.filter((p) =>
-    activeNav.categories.includes(p.category) &&
-    (p.fit || []).includes(activeLook?.bodyType || 'woman') &&
-    matchesSubFilter(p, subFilter) &&
-    (!search || `${p.name} ${p.brand} ${p.sku}`.toLowerCase().includes(search.toLowerCase()))
-  ), [products, activeNav, activeLook, subFilter, search]);
+  const filteredProducts = useMemo(() => {
+    const base = products.filter((p) =>
+      activeNav.categories.includes(p.category) &&
+      (p.fit || []).includes(activeLook?.bodyType || 'woman') &&
+      matchesSubFilter(p, subFilter) &&
+      (!search || `${p.name} ${p.brand} ${p.sku}`.toLowerCase().includes(search.toLowerCase()))
+    );
+    if (sortBy === 'price-asc') return [...base].sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+    if (sortBy === 'price-desc') return [...base].sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+    return base;
+  }, [products, activeNav, activeLook, subFilter, search, sortBy]);
 
   const allLookTotals = useMemo(() => looks.map((look) => ({
     ...look,
@@ -206,6 +214,8 @@ export default function Page() {
     return { ...member, lookName: look?.name || 'Unassigned', itemCount, perSet, total };
   });
   const baseTotal = assignedRows.reduce((s, r) => s + r.total, 0);
+  const itemsTotal = assignedRows.reduce((s, r) => s + ((r.perSet - Number(logoCost || 0) * r.itemCount) * Number(setsPerCrew || 1)), 0);
+  const logoTotal = assignedRows.reduce((s, r) => s + (Number(logoCost || 0) * r.itemCount * Number(setsPerCrew || 1)), 0);
   const spareTotal = baseTotal * (Number(sparePercent || 0) / 100);
   const grandTotal = baseTotal + spareTotal;
 
@@ -382,7 +392,19 @@ export default function Page() {
             {/* ── Catalog ── */}
             <section className="catalog-panel no-print">
               <div className="catalog-header">
-                <h2>{activeNav.label}</h2>
+                <div className="catalog-title-row">
+                  <h2>{activeNav.label}</h2>
+                  <div className="catalog-controls">
+                    <label className="sort-label">Sort by:</label>
+                    <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                      <option value="newest">Newest</option>
+                      <option value="price-asc">Price: Low to High</option>
+                      <option value="price-desc">Price: High to Low</option>
+                    </select>
+                    <button className="view-btn active" title="Grid view">▦</button>
+                    <button className="view-btn" title="List view">☰</button>
+                  </div>
+                </div>
                 <div className="catalog-filters">
                   {activeNav.subFilters.map((f) => (
                     <button key={f} className={`filter-chip ${subFilter === f ? 'active' : ''}`} onClick={() => setSubFilter(f)}>{f}</button>
@@ -417,11 +439,15 @@ export default function Page() {
                 <div className="budget-row"><label>Sets per Crew Member</label><input className="budget-input" type="number" min="1" value={setsPerCrew} onChange={(e) => setSetsPerCrew(Number(e.target.value))} /></div>
                 <div className="budget-row"><label>Logo / Embroidery per item</label><input className="budget-input" type="number" value={logoCost} onChange={(e) => setLogoCost(e.target.value)} /></div>
                 <div className="budget-row"><label>Spare Stock Allowance %</label><input className="budget-input" type="number" value={sparePercent} onChange={(e) => setSparePercent(e.target.value)} /></div>
+                <div className="budget-divider" />
+                <div className="budget-row"><label>Items Total</label><strong>{money(itemsTotal)}</strong></div>
+                <div className="budget-row"><label>Logo / Embroidery Total</label><strong>{money(logoTotal)}</strong></div>
+                <div className="budget-row"><label>Spare Stock ({sparePercent}%)</label><strong>{money(spareTotal)}</strong></div>
                 <div className="grand-total-box"><span>Grand Total</span><strong>{money(grandTotal)}</strong></div>
               </div>
 
               <div className="panel-block" style={{ flex: 1 }}>
-                <h3>Crew Order Matrix</h3>
+                <h3>Crew Order Matrix <span style={{ float: 'right', textTransform: 'none', letterSpacing: 0 }}>{crew.length} items</span></h3>
                 <div className="crew-table-wrap">
                   <table className="crew-table">
                     <thead><tr><th>Name</th><th>Role</th><th>Sizes</th><th>Look</th><th>Sets</th><th>Total</th></tr></thead>
