@@ -20,9 +20,6 @@ const CATEGORY_SHAPE = {
 };
 
 const ADVANCED_FIELDS = [
-  ['brand', 'Brand (manufacturer)'],
-  ['supplierName', 'Supplier'],
-  ['productUrl', 'Supplier product page URL'],
   ['sku', 'SKU / product code'],
   ['fabric', 'Fabric / material'],
   ['details', 'Notes / details'],
@@ -180,6 +177,49 @@ export function ProductEditor({
                   <option value="GBP">GBP £</option>
                 </select>
               </div>
+            </div>
+
+            <div className="product-editor-row">
+              <div className="control-group">
+                <label>Brand (manufacturer)</label>
+                <input
+                  className="text-input"
+                  value={draft.brand || ''}
+                  onChange={(e) => setDraft({ ...draft, brand: e.target.value })}
+                  placeholder="e.g. Kariban"
+                />
+              </div>
+              <div className="control-group">
+                <label>Supplier</label>
+                <input
+                  className="text-input"
+                  value={draft.supplierName || ''}
+                  onChange={(e) => setDraft({ ...draft, supplierName: e.target.value })}
+                  placeholder="e.g. Marina Yacht Wear"
+                />
+              </div>
+            </div>
+
+            <div className="control-group">
+              <label>Supplier product page</label>
+              {draft.productUrl ? (
+                <div className="product-url-row">
+                  <input
+                    className="text-input"
+                    value={draft.productUrl || ''}
+                    onChange={(e) => setDraft({ ...draft, productUrl: e.target.value })}
+                    placeholder="https://supplier.com/products/..."
+                  />
+                  <a className="btn ghost" href={draft.productUrl} target="_blank" rel="noopener noreferrer">Open</a>
+                </div>
+              ) : (
+                <input
+                  className="text-input"
+                  value={draft.productUrl || ''}
+                  onChange={(e) => setDraft({ ...draft, productUrl: e.target.value })}
+                  placeholder="https://supplier.com/products/..."
+                />
+              )}
             </div>
 
             <div className="control-group">

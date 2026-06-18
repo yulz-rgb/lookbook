@@ -33,6 +33,14 @@ export function ProductCard({ product, isSelected, onToggle, onEdit, readOnly = 
           ))}
         </div>
         <div className="product-specs">
+          <div className="product-spec"><strong>Brand</strong>{product.brand || '—'}</div>
+          <div className="product-spec"><strong>Supplier</strong>
+            {product.productUrl ? (
+              <a className="product-spec-link" href={product.productUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                {product.supplierName || 'View'}
+              </a>
+            ) : (product.supplierName || '—')}
+          </div>
           <div className="product-spec"><strong>Fabric</strong>{product.fabric?.split(',')[0] || '—'}</div>
           <div className="product-spec"><strong>Sizes</strong>{product.sizeRange || 'TBC'}</div>
           <div className="product-spec"><strong>Lead</strong>{product.leadTime || 'TBC'}</div>

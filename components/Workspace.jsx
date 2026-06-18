@@ -10,7 +10,7 @@ import {
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
-  categories, defaultCrew, defaultLooks, defaultProducts, bodyTypes, roles,
+  categories, defaultCrew, defaultLooks, defaultProducts, bodyTypes, roles, productMatchesBodyType,
   navCategories, NAV_SECTION_LABELS, vessels, isDemoCatalog, productMatchesNav, catalogNavForProduct, DEMO_SKUS,
 } from '../lib/catalog';
 import { normalizeCrewMember } from '../lib/crew';
@@ -23,6 +23,8 @@ import { ProductEditor } from './ProductEditor';
 import { CatalogImport } from './CatalogImport';
 import { CrewImport } from './CrewImport';
 import { TeamPanel } from './TeamPanel';
+import { ProductAttribution } from './ProductAttribution';
+import { enrichProductsWithDefaults, productsMissingAttribution } from '../lib/catalogAttribution';
 import {
   money, buildLookTotals, computeBudget, buildOrderSummary, buildSizeAwareOrderSummary,
   indexById, compareLooks,
@@ -48,7 +50,7 @@ const NAV_ICONS = {
 };
 const LOCAL_KEY = 'yachtUniform.workspace.v5';
 const CATALOG_VERSION_KEY = 'yachtUniform.catalogVersion';
-const CATALOG_VERSION = 'marina-195';
+const CATALOG_VERSION = 'marina-v3-attribution';
 const ORDER_HISTORY_KEY = 'yachtUniform.orders.v1';
 
 const DEFAULT_SETTINGS = {
@@ -242,15 +244,27 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     if (mode !== 'local') return;
     try {
       const raw = window.localStorage.getItem(LOCAL_KEY);
+      const storedVersion = window.localStorage.getItem(CATALOG_VERSION_KEY);
       if (raw) {
         const data = JSON.parse(raw);
+        let nextProducts = data.products;
+        if (nextProducts?.length) {
+          if (isStaleLocalCatalog(nextProducts)) {
+            nextProducts = defaultProducts;
+          } else if (storedVersion !== CATALOG_VERSION || productsMissingAttribution(nextProducts)) {
+            nextProducts = enrichProductsWithDefaults(nextProducts, defaultProducts);
+          }
+        }
         /* eslint-disable react-hooks/set-state-in-effect */
-        if (data.products) setProducts(data.products);
+        if (nextProducts) setProducts(nextProducts);
         if (data.looks) setLooks(data.looks);
         if (data.crew) setCrew(normalizeCrewList(data.crew, data.looks || looks));
         if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
         if (data.orderHistory) setOrderHistory(data.orderHistory);
         if (data.approvalLog) setApprovalLog(data.approvalLog);
+        if (storedVersion !== CATALOG_VERSION || (nextProducts && productsMissingAttribution(data.products))) {
+          window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
+        }
         /* eslint-enable react-hooks/set-state-in-effect */
       }
       const ordersRaw = window.localStorage.getItem(ORDER_HISTORY_KEY);
@@ -298,7 +312,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     let base = products.filter((p) =>
       p.active !== false &&
       productMatchesNav(p, activeNav) &&
-      (p.fit || []).includes(activeLook?.bodyType || 'woman') &&
+      productMatchesBodyType(p, activeLook?.bodyType || 'woman') &&
       matchesSubFilter(p, subFilter) &&
       productMatchesRole(p, advancedFilters.role || roleFilter) &&
       (!search || `${p.name} ${p.brand} ${p.sku}`.toLowerCase().includes(search.toLowerCase())));
@@ -727,7 +741,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             <div className="gender-toggle">
               {bodyTypes.map((b) => (
                 <button key={b.id} type="button" className={`gender-btn ${activeLook.bodyType === b.id ? 'active' : ''}`}
-                  onClick={() => patchActiveLook({ bodyType: b.id, productIds: activeLook.productIds.filter((id) => productsById[id]?.fit?.includes(b.id)) })}>
+                  onClick={() => patchActiveLook({ bodyType: b.id, productIds: activeLook.productIds.filter((id) => productMatchesBodyType(productsById[id], b.id)) })}>
                   {b.label}
                 </button>
               ))}
@@ -983,6 +997,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                     <div className="current-item-img"><Mannequin bodyType={activeLook.bodyType} selectedProducts={[p]} compact /></div>
                     <div className="current-item-info">
                       <div className="name">{p.name.split(' ').slice(0, 2).join(' ')}</div>
+                      <ProductAttribution product={p} compact />
                       <div className="price">{fmt(p.price)}</div>
                     </div>
                   </div>
