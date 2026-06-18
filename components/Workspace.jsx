@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Anchor, Download, FileDown, FileText, Filter, LayoutDashboard, Menu, Plus,
+  Anchor, Download, FileDown, FileText, Filter, Menu, Plus,
   RotateCw, Search, Settings, Ship, SlidersHorizontal, Sun, Trash2, Upload,
-  Wand2, X, ZoomIn, AlertTriangle, CheckCircle2, ClipboardList, PanelRight,
+  Wand2, X, ZoomIn, AlertTriangle, CheckCircle2, PanelRight,
   Users, Lock,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
   categories, defaultCrew, defaultLooks, defaultProducts, bodyTypes, roles,
-  navCategories, vessels, isDemoCatalog,
+  navCategories, NAV_SECTION_LABELS, vessels, isDemoCatalog, productMatchesNav,
 } from '../lib/catalog';
 import { normalizeCrewMember, memberSets } from '../lib/crew';
 import { capabilitiesFor, canAdvance, STAGE_ACTOR } from '../lib/permissions';
@@ -21,20 +21,30 @@ import { ProductListRow } from './ProductListRow';
 import { ProductEditor } from './ProductEditor';
 import { CatalogImport } from './CatalogImport';
 import { CrewImport } from './CrewImport';
-import { OperationalDashboard } from './OperationalDashboard';
 import { TeamPanel } from './TeamPanel';
 import {
   money, buildLookTotals, computeBudget, buildOrderSummary, buildSizeAwareOrderSummary,
-  validateOrder, indexById, buildDashboardTasks, compareLooks,
+  validateOrder, indexById, compareLooks,
 } from '../lib/calc';
-import { buildSupplierOrderCsv, buildPackingListCsv, buildSupplierBreakdownCsv } from '../lib/csv';
+import { buildSupplierOrderCsv } from '../lib/csv';
 import {
   saveWorkspaceAction, setActiveYachtAction, createOrderAction, advanceOrderAction,
   recordArtifactAction,
 } from '../app/actions';
 
 const uid = (p) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
-const NAV_ICONS = { 'tops-shirts': '👕', dresses: '👗', bottoms: '🩳', outerwear: '🧥', shoes: '👞', accessories: '🎩' };
+const NAV_ICONS = {
+  bridge: '🧭',
+  deck: '⚓',
+  engineering: '⚙️',
+  interior: '🌙',
+  galley: '🔪',
+  spa: '💆',
+  epaulettes: '🎖️',
+  footwear: '👟',
+  outerwear: '🌧️',
+  accessories: '🧢',
+};
 const LOCAL_KEY = 'yachtUniform.workspace.v4';
 const ORDER_HISTORY_KEY = 'yachtUniform.orders.v1';
 
@@ -75,6 +85,8 @@ function productMatchesRole(product, role) {
     captain: ['captain', 'boss', 'deck'],
     deck: ['deck', 'engineer'],
     engineer: ['engineer', 'deck'],
+    chef: ['chef'],
+    spa: ['spa'],
   };
   const allowed = new Set([role, ...(aliases[role] || [])]);
   return tags.some((t) => allowed.has(t));
@@ -82,13 +94,31 @@ function productMatchesRole(product, role) {
 
 function matchesSubFilter(product, subFilter) {
   if (!subFilter || subFilter === 'All') return true;
-  const hay = `${product.name} ${product.fabric} ${product.imageHint}`.toLowerCase();
+  const hay = `${product.name} ${product.fabric} ${product.imageHint} ${product.details || ''}`.toLowerCase();
+  const roleHay = (product.roleTags || []).join(' ').toLowerCase();
   const map = {
-    Polo: 'polo', Shirt: 'shirt', Linen: 'linen', Technical: 'technical', Resort: 'resort',
-    Service: 'service', Shorts: 'shorts', Skort: 'skort', Trousers: 'trouser',
-    Softshell: 'softshell', Jacket: 'jacket', Deck: 'deck', Cap: 'cap', Belt: 'belt',
+    Polos: 'polo', 'T-Shirts': 'shirt', Shorts: 'shorts', Shirts: 'shirt', Blouses: 'blouse',
+    'Epaulette Shirts': 'epaulette', 'Officer Shirts': 'officer', Trousers: 'trouser', Knitwear: 'knit',
+    Dresses: 'dress', Skorts: 'skort', Jackets: 'jacket', Aprons: 'apron', Shoes: 'shoe',
+    Overalls: 'overall', Softshell: 'softshell', Tunics: 'tunic',
+    Jacket: 'jacket', Fleece: 'fleece', 'Foul Weather': 'foul',
+    'Non-Marking': 'non-marking', Caps: 'cap', Belts: 'belt', Sunglasses: 'sunglass',
   };
-  return hay.includes((map[subFilter] || subFilter).toLowerCase());
+  const epauletteDept = {
+    Deck: ['deck', 'anchor', 'captain', 'bosun'],
+    Engineering: ['engineer', 'propeller', 'engineering'],
+    Interior: ['interior', 'stew', 'crescent', 'chief-stew'],
+    Galley: ['chef', 'galley', 'knife', 'fork'],
+  };
+  if (epauletteDept[subFilter]) {
+    return epauletteDept[subFilter].some((term) => hay.includes(term) || roleHay.includes(term));
+  }
+  const term = (map[subFilter] || subFilter).toLowerCase();
+  if (['deck', 'interior', 'galley'].includes(term)) {
+    const deptTerm = term === 'galley' ? 'chef' : term;
+    return hay.includes(term) || roleHay.includes(deptTerm);
+  }
+  return hay.includes(term);
 }
 
 function parseLeadDays(leadTime) {
@@ -113,9 +143,8 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   ));
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS, ...(initialData?.settings || {}) });
 
-  const [appView, setAppView] = useState('dashboard');
   const [activeLookId, setActiveLookId] = useState((initialData?.looks?.[0] || defaultLooks[0]).id);
-  const [activeNavCat, setActiveNavCat] = useState('tops-shirts');
+  const [activeNavCat, setActiveNavCat] = useState('bridge');
   const [subFilter, setSubFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
@@ -206,7 +235,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const filteredProducts = useMemo(() => {
     let base = products.filter((p) =>
       p.active !== false &&
-      activeNav.categories.includes(p.category) &&
+      productMatchesNav(p, activeNav) &&
       (p.fit || []).includes(activeLook?.bodyType || 'woman') &&
       matchesSubFilter(p, subFilter) &&
       productMatchesRole(p, advancedFilters.role || roleFilter) &&
@@ -240,10 +269,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const orderSummary = useMemo(() => buildOrderSummary(crew, looks, products, settings), [crew, looks, products, settings]);
   const sizeAwareOrder = useMemo(() => buildSizeAwareOrderSummary(crew, looks, products, settings), [crew, looks, products, settings]);
   const warnings = useMemo(() => validateOrder(crew, looks, products, settings), [crew, looks, products, settings]);
-  const dashboardTasks = useMemo(
-    () => buildDashboardTasks(crew, looks, products, settings, { orderStatus: order?.status }),
-    [crew, looks, products, settings, order],
-  );
   const compareData = useMemo(() => compareLooks(compareIds, looks, products), [compareIds, looks, products]);
   const fmt = (v) => money(v, settings.currency);
   const errorCount = warnings.filter((w) => w.level === 'error').length;
@@ -253,13 +278,15 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   function patchActiveLook(patch) { setLooks(looks.map((l) => (l.id === activeLook.id ? { ...l, ...patch } : l))); }
 
   function toggleProduct(product) {
-    const exclusive = ['tops', 'shirts', 'bottoms', 'dresses', 'outerwear', 'shoes'];
+    const exclusive = ['tops', 'shirts', 'bottoms', 'dresses', 'outerwear', 'shoes', 'chef-wear', 'engineering', 'spa-wear', 'epaulettes'];
     let nextIds = activeLook.productIds || [];
     if (nextIds.includes(product.id)) nextIds = nextIds.filter((id) => id !== product.id);
     else {
-      const clearCategories = product.category === 'dresses' ? ['tops', 'shirts', 'bottoms', 'dresses']
-        : product.category === 'tops' || product.category === 'shirts' ? ['tops', 'shirts', 'dresses']
-          : product.category === 'bottoms' ? ['bottoms', 'dresses'] : [product.category];
+      const onePiece = ['dresses', 'engineering'];
+      const tops = ['tops', 'shirts', 'epaulettes', 'chef-wear', 'spa-wear'];
+      const clearCategories = onePiece.includes(product.category) ? [...onePiece, ...tops, 'bottoms']
+        : tops.includes(product.category) ? [...tops, 'dresses']
+          : product.category === 'bottoms' ? ['bottoms', 'dresses', 'engineering'] : [product.category];
       nextIds = exclusive.includes(product.category)
         ? nextIds.filter((id) => !clearCategories.includes(productsById[id]?.category))
         : nextIds;
@@ -346,15 +373,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     setCrew(normalizeCrewList([...crew, ...imported], looks));
     setShowCrewImport(false);
     setShowCrewMgmt(true);
-    setAppView('builder');
-  }
-
-  function handleDashboardAction(action) {
-    setAppView('builder');
-    if (action === 'crew') { setShowCrewMgmt(true); setRightPanelOpen(true); }
-    if (action === 'approval') setShowApprovals(true);
-    if (action === 'budget' || action === 'procurement') setRightPanelOpen(true);
-    if (action === 'looks') setMobileNavOpen(true);
   }
 
   function downloadBlob(content, filename, type) {
@@ -392,18 +410,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     const csv = buildSupplierOrderCsv({ crew, looks, products, settings, vessel: settings.vessel });
     downloadBlob(csv, `${slug}-supplier-order.csv`, 'text/csv;charset=utf-8;');
     archiveArtifact('CSV', `${slug}-supplier-order.csv`, strToBase64(csv), 'text/csv');
-  }
-
-  function exportSupplierBreakdown() {
-    const csv = buildSupplierBreakdownCsv({ crew, looks, products, settings, vessel: settings.vessel });
-    downloadBlob(csv, `${slug}-supplier-purchase-orders.csv`, 'text/csv;charset=utf-8;');
-    archiveArtifact('CSV', `${slug}-supplier-purchase-orders.csv`, strToBase64(csv), 'text/csv');
-  }
-
-  function exportPackingLists() {
-    const csv = buildPackingListCsv({ crew, looks, products, settings, vessel: settings.vessel });
-    downloadBlob(csv, `${slug}-packing-lists.csv`, 'text/csv;charset=utf-8;');
-    archiveArtifact('CSV', `${slug}-packing-lists.csv`, strToBase64(csv), 'text/csv');
   }
 
   function exportJson() {
@@ -519,12 +525,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
         </div>
         <div className="topbar-title">Yacht Uniform Lookbook</div>
         <div className="topbar-actions">
-          <div className="view-tabs">
-            <button type="button" className={`view-tab ${appView === 'dashboard' ? 'active' : ''}`} onClick={() => setAppView('dashboard')}>
-              <LayoutDashboard size={12} style={{ marginRight: 4, verticalAlign: -2 }} />Dashboard
-            </button>
-            <button type="button" className={`view-tab ${appView === 'builder' ? 'active' : ''}`} onClick={() => setAppView('builder')}>Builder</button>
-          </div>
           {mode === 'server' && authInfo?.yachts?.length > 0 && (
             <select className="topbar-select" value={authInfo.activeYachtId} onChange={(e) => switchYacht(e.target.value)} aria-label="Active yacht">
               {authInfo.yachts.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
@@ -552,11 +552,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
           </button>
           <button type="button" className="topbar-btn gold" onClick={downloadPdf}><Download size={14} /> Export PDF</button>
           <button type="button" className="topbar-btn" onClick={exportCsv}><FileDown size={14} /> Export CSV</button>
-          <button type="button" className="topbar-btn" onClick={exportSupplierBreakdown}><FileDown size={14} /> Supplier POs</button>
-          <button type="button" className="topbar-btn" onClick={exportPackingLists}><FileDown size={14} /> Packing lists</button>
-          {(mode !== 'server' || caps.canCreateOrder) && (
-            <button type="button" className="topbar-btn" onClick={() => setShowApprovals(true)}><ClipboardList size={16} /> Approvals</button>
-          )}
           {mode === 'server' && caps.canManageMembers && (
             <button type="button" className="topbar-btn" onClick={() => setShowTeam(true)}><Users size={16} /> Team</button>
           )}
@@ -565,17 +560,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
           )}
         </div>
       </header>
-
-      {appView === 'dashboard' && (
-        <OperationalDashboard
-          tasks={dashboardTasks}
-          budget={budget}
-          warningCount={warnings.length}
-          orderStatus={order?.status}
-          onAction={handleDashboardAction}
-          fmt={fmt}
-        />
-      )}
 
       {showSettings && (
         <div className="admin-overlay no-print" onClick={() => setShowSettings(false)}>
@@ -673,7 +657,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
         </div>
       )}
 
-      {(appView === 'builder' || appView === 'dashboard') && (
       <div className="dashboard-body">
         <aside className={`left-nav no-print ${mobileNavOpen ? 'open' : ''}`}>
           <div className="nav-section">
@@ -695,7 +678,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               <button key={l.id} type="button" className={`nav-look-btn ${l.id === activeLook.id ? 'active' : ''}`}
                 onClick={(e) => {
                   if (e.shiftKey) { toggleCompareLook(l.id); return; }
-                  setActiveLookId(l.id); setAppView('builder');
+                  setActiveLookId(l.id);
                 }}>
                 <span className="nav-look-name">{l.name}</span>
                 <span className="nav-look-price">{fmt(lookTotals.find((lt) => lt.id === l.id)?.subtotal || 0)}</span>
@@ -706,14 +689,23 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
           </div>
 
           <div className="nav-section">
-            <div className="nav-section-title"><span className="num">3</span> Categories</div>
-            {navCategories.map((nc) => (
-              <button key={nc.id} type="button" className={`nav-cat-btn ${activeNavCat === nc.id ? 'active' : ''}`}
-                onClick={() => { setActiveNavCat(nc.id); setSubFilter('All'); setAppView('builder'); }}>
-                <span className="nav-cat-icon">{NAV_ICONS[nc.id]}</span>
-                <span className="nav-cat-label">{nc.label}</span>
-              </button>
-            ))}
+            <div className="nav-section-title"><span className="num">3</span> Uniform</div>
+            {navCategories.map((nc, i) => {
+              const prev = navCategories[i - 1];
+              const showLabel = nc.section && nc.section !== prev?.section;
+              return (
+                <div key={nc.id}>
+                  {showLabel && (
+                    <div className="nav-subsection-label">{NAV_SECTION_LABELS[nc.section]}</div>
+                  )}
+                  <button type="button" className={`nav-cat-btn ${activeNavCat === nc.id ? 'active' : ''}`}
+                    onClick={() => { setActiveNavCat(nc.id); setSubFilter('All'); }}>
+                    <span className="nav-cat-icon">{NAV_ICONS[nc.id]}</span>
+                    <span className="nav-cat-label">{nc.label}</span>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </aside>
 
@@ -990,7 +982,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
           </div>
         </div>
       </div>
-      )}
 
       {showAdmin && (
         <ProductEditor draft={editProduct} setDraft={setEditProduct} onSave={saveProduct} canUpload={canUpload}
