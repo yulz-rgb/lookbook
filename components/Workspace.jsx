@@ -13,7 +13,9 @@ import jsPDF from 'jspdf';
 import {
   categories, defaultCrew, defaultLooks, defaultProducts, marinaDefaultProducts, bodyTypes, roles, productMatchesBodyType,
   navCategories, NAV_SECTION_LABELS, vessels, isDemoCatalog, productMatchesNav, productMatchesSubFilter, catalogNavForProduct,
+  importedSupplierCatalog,
 } from '../lib/catalog';
+import { ALL_SUPPLIERS_NAV_ID } from '../lib/uniformTaxonomy';
 import { normalizeCrewMember } from '../lib/crew';
 import { capabilitiesFor, canAdvance, STAGE_ACTOR } from '../lib/permissions';
 import { ModelPreview } from './ModelPreview';
@@ -26,7 +28,7 @@ import { CatalogImport } from './CatalogImport';
 import { CrewImport } from './CrewImport';
 import { TeamPanel } from './TeamPanel';
 import { ProductAttribution } from './ProductAttribution';
-import { mergeCatalogWithDefaults, productsMissingAttribution, resolveCatalogProducts, isSparseServerCatalog } from '../lib/catalogAttribution';
+import { mergeCatalogWithDefaults, ensureFullBundledCatalog } from '../lib/catalogAttribution';
 import { defaultProductColour, parseColourImages, withProductColour } from '../lib/productColour';
 import {
   money, buildLookTotals, computeBudget, buildOrderSummary, buildSizeAwareOrderSummary,
@@ -50,11 +52,13 @@ const NAV_ICONS = {
   footwear: '👟',
   outerwear: '🌧️',
   accessories: '🧢',
+  'all-suppliers': '📦',
 };
 const LOCAL_KEY = 'yachtUniform.workspace.v5';
 const CATALOG_VERSION_KEY = 'yachtUniform.catalogVersion';
-const CATALOG_VERSION = 'all-suppliers-v3';
+const CATALOG_VERSION = 'all-suppliers-v5';
 const ORDER_HISTORY_KEY = 'yachtUniform.orders.v1';
+const CATALOG_PAGE_SIZE = 96;
 
 const DEFAULT_SETTINGS = {
   vessel: vessels[0],
@@ -162,8 +166,8 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   );
   const canEdit = caps.canEdit;
   const seeded = useRef(false);
-  const [products, setProducts] = useState(() => resolveCatalogProducts(
-    initialData?.products?.length ? initialData.products : defaultProducts,
+  const [products, setProducts] = useState(() => ensureFullBundledCatalog(
+    initialData?.products?.length ? initialData.products : [],
     defaultProducts,
   ));
   const [looks, setLooks] = useState(initialData?.looks?.length ? initialData.looks : defaultLooks);
@@ -174,13 +178,14 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS, ...(initialData?.settings || {}) });
 
   const [activeLookId, setActiveLookId] = useState((initialData?.looks?.[0] || defaultLooks[0]).id);
-  const [activeNavCat, setActiveNavCat] = useState('bridge');
-  const [expandedNavCat, setExpandedNavCat] = useState('bridge');
+  const [activeNavCat, setActiveNavCat] = useState(ALL_SUPPLIERS_NAV_ID);
+  const [expandedNavCat, setExpandedNavCat] = useState(ALL_SUPPLIERS_NAV_ID);
   const [uniformNavOpen, setUniformNavOpen] = useState(true);
   const [subFilter, setSubFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [catalogView, setCatalogView] = useState('grid');
+  const [catalogLimit, setCatalogLimit] = useState(CATALOG_PAGE_SIZE);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState(DEFAULT_ADVANCED_FILTERS);
   const [roleFilter, setRoleFilter] = useState('');
@@ -230,27 +235,24 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
       const storedVersion = window.localStorage.getItem(CATALOG_VERSION_KEY);
       if (raw) {
         const data = JSON.parse(raw);
-        let nextProducts = data.products;
-        if (nextProducts?.length) {
-          if (isLegacyBootstrapCatalog(nextProducts)) {
-            nextProducts = defaultProducts;
-          } else {
-            nextProducts = mergeCatalogWithDefaults(nextProducts, defaultProducts);
-          }
-        }
-        if (storedVersion !== CATALOG_VERSION || (data.products && productsMissingAttribution(data.products))) {
-          nextProducts = mergeCatalogWithDefaults(nextProducts || defaultProducts, defaultProducts);
-          window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
+        let nextProducts = isLegacyBootstrapCatalog(data.products)
+          ? defaultProducts
+          : ensureFullBundledCatalog(data.products || [], defaultProducts);
+        if (storedVersion !== CATALOG_VERSION) {
+          nextProducts = ensureFullBundledCatalog(data.products || [], defaultProducts);
         }
         /* eslint-disable react-hooks/set-state-in-effect */
-        if (nextProducts) setProducts(nextProducts);
+        setProducts(nextProducts);
         if (data.looks) setLooks(data.looks);
         if (data.crew) setCrew(normalizeCrewList(data.crew, data.looks || looks));
         if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
         if (data.orderHistory) setOrderHistory(data.orderHistory);
         if (data.approvalLog) setApprovalLog(data.approvalLog);
         /* eslint-enable react-hooks/set-state-in-effect */
+      } else {
+        setProducts(defaultProducts);
       }
+      window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
       const ordersRaw = window.localStorage.getItem(ORDER_HISTORY_KEY);
       if (ordersRaw) setOrderHistory(JSON.parse(ordersRaw));
     } catch {}
@@ -260,16 +262,16 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
 
   useEffect(() => {
     if (mode !== 'server' || !canEdit || sparseCatalogSynced.current) return;
-    const stored = initialData?.products || [];
-    if (!isSparseServerCatalog(stored, defaultProducts)) return;
-    if (products.length <= stored.length) return;
+    if (products.length >= defaultProducts.length) return;
     sparseCatalogSynced.current = true;
+    const full = ensureFullBundledCatalog(products, defaultProducts);
+    setProducts(full);
     (async () => {
       setSaveState('saving');
-      const res = await saveWorkspaceAction({ products, looks, crew, settings });
+      const res = await saveWorkspaceAction({ products: full, looks, crew, settings });
       setSaveState(res?.ok ? 'saved' : 'error');
     })();
-  }, [mode, canEdit, initialData?.products, products, looks, crew, settings]);
+  }, [mode, canEdit, products, looks, crew, settings]);
 
   useEffect(() => {
     if (mode === 'local') {
@@ -319,13 +321,17 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   );
 
   const filteredProducts = useMemo(() => {
-    let base = products.filter((p) =>
-      p.active !== false &&
-      productMatchesNav(p, activeNav) &&
-      productMatchesBodyType(p, activeLook?.bodyType || 'woman') &&
-      productMatchesSubFilter(p, subFilter, activeNav.id) &&
-      productMatchesRole(p, advancedFilters.role || roleFilter) &&
-      (!search || `${p.name} ${p.brand} ${p.supplierName || ''}`.toLowerCase().includes(search.toLowerCase())));
+    const isAllSuppliers = activeNavCat === ALL_SUPPLIERS_NAV_ID;
+    let base = products.filter((p) => {
+      if (p.active === false) return false;
+      if (isAllSuppliers) return !!p.supplierCatalogId;
+      if (!productMatchesNav(p, activeNav)) return false;
+      if (!productMatchesBodyType(p, activeLook?.bodyType || 'woman')) return false;
+      if (!productMatchesSubFilter(p, subFilter, activeNav.id)) return false;
+      if (!productMatchesRole(p, advancedFilters.role || roleFilter)) return false;
+      if (search && !`${p.name} ${p.brand} ${p.supplierName || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    });
 
     if (advancedFilters.supplier) {
       const q = advancedFilters.supplier.toLowerCase();
@@ -349,6 +355,16 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     if (sortBy === 'lead') return [...base].sort((a, b) => (parseLeadDays(a.leadTime) || 999) - (parseLeadDays(b.leadTime) || 999));
     return base;
   }, [products, activeNav, activeLook, subFilter, search, sortBy, advancedFilters, roleFilter]);
+
+  useEffect(() => {
+    setCatalogLimit(CATALOG_PAGE_SIZE);
+  }, [activeNavCat, subFilter, search, sortBy, advancedFilters, roleFilter, activeLook?.bodyType]);
+
+  const visibleProducts = useMemo(
+    () => filteredProducts.slice(0, catalogLimit),
+    [filteredProducts, catalogLimit],
+  );
+  const hasMoreCatalog = filteredProducts.length > visibleProducts.length;
 
   const lookTotals = useMemo(() => buildLookTotals(looks, products), [looks, products]);
   const lookTotalsDisplay = useMemo(
@@ -585,17 +601,23 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   }
 
   const resetDemo = () => {
-    setProducts(defaultProducts);
+    setProducts([...defaultProducts]);
     setLooks(defaultLooks);
     setCrew(normalizeCrewList(defaultCrew, defaultLooks));
     setSettings(DEFAULT_SETTINGS);
     setActiveLookId(defaultLooks[0].id);
+    setActiveNavCat(ALL_SUPPLIERS_NAV_ID);
+    setExpandedNavCat(ALL_SUPPLIERS_NAV_ID);
+    setSubFilter('All');
     setOrder(null);
     setApprovalLog([]);
     try {
       window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
+      window.localStorage.removeItem(LOCAL_KEY);
     } catch {}
   };
+
+  const bundledSupplierCount = importedSupplierCatalog.filter((s) => s.count > 0).length;
 
   return (
     <main className="dashboard">
@@ -603,7 +625,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
         <div className="demo-banner no-print">
           <span className="demo-banner-tag">Demo</span>
           <span className="demo-banner-text">
-            {products.length} Marina Yacht Wear items loaded. Data saves to this browser only.
+            {products.length.toLocaleString()} items from {bundledSupplierCount} suppliers loaded. Data saves to this browser only.
           </span>
           <div className="demo-banner-actions">
             <button type="button" className="demo-banner-btn" onClick={resetDemo}>Reload catalog</button>
@@ -952,7 +974,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               <div className="catalog-grid-wrap">
                 {catalogView === 'grid' ? (
                   <div className="catalog-grid">
-                    {filteredProducts.map((p) => (
+                    {visibleProducts.map((p) => (
                       <ProductCard key={p.id} product={p} isSelected={activeLook.productIds.includes(p.id)}
                         selectedColour={colourForProduct(p)}
                         onColourSelect={selectProductColour}
@@ -961,12 +983,26 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                   </div>
                 ) : (
                   <div className="product-list">
-                    {filteredProducts.map((p) => (
+                    {visibleProducts.map((p) => (
                       <ProductListRow key={p.id} product={withProductColour(p, colourForProduct(p))}
                         isSelected={activeLook.productIds.includes(p.id)}
                         roleMatch={productMatchesRole(p, roleFilter)}
                         onToggle={toggleProduct} onEdit={openEditProduct} />
                     ))}
+                  </div>
+                )}
+                {hasMoreCatalog && (
+                  <div className="catalog-load-more">
+                    <p className="catalog-load-more-meta">
+                      Showing {visibleProducts.length.toLocaleString()} of {filteredProducts.length.toLocaleString()} items
+                    </p>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={() => setCatalogLimit((limit) => limit + CATALOG_PAGE_SIZE)}
+                    >
+                      Load more
+                    </button>
                   </div>
                 )}
                 {filteredProducts.length === 0 && (
@@ -975,7 +1011,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                     {products.length > 0 ? (
                       <>
                         <p>No products match this department and active look ({activeLook?.bodyType === 'man' ? 'Male' : 'Female'}).</p>
-                        <p className="import-hint">Try Bridge, Deck, or Interior — or switch the look body type. Catalog has {products.length} items total.</p>
+                        <p className="import-hint">Open <strong>All Suppliers</strong> in the sidebar, or search by supplier name. Catalog has {products.length.toLocaleString()} items from {bundledSupplierCount} suppliers.</p>
                       </>
                     ) : (
                       <>

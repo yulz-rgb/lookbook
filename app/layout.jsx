@@ -1,8 +1,9 @@
 import './globals.css';
-import { Inter } from 'next/font/google';
+import { Inter, Playfair_Display } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import { Analytics } from '@vercel/analytics/next';
 import { hasClerk } from '../lib/config';
+import { siteConfig } from '../lib/site';
 import { ChunkLoadRecovery } from '../components/ChunkLoadRecovery';
 
 const inter = Inter({
@@ -11,10 +12,19 @@ const inter = Inter({
   variable: '--font-sans',
 });
 
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-display',
+});
+
 export const metadata = {
-  title: 'Yacht Uniform Lookbook',
-  description:
-    'Interactive yacht crew uniform configurator — build looks, manage crew sizing, plan budgets, and export procurement-ready lookbooks.',
+  title: {
+    default: `${siteConfig.name} — Yacht Crew Uniform Planning`,
+    template: `%s | ${siteConfig.name}`,
+  },
+  description: siteConfig.description,
+  metadataBase: new URL(siteConfig.url),
 };
 
 // Brand the hosted Clerk widgets so the first screen every persona sees reads as
@@ -38,7 +48,7 @@ const clerkAppearance = {
 
 export default function RootLayout({ children }) {
   const body = (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
       <body className={inter.className}>
         <ChunkLoadRecovery />
         {children}
@@ -47,6 +57,14 @@ export default function RootLayout({ children }) {
     </html>
   );
   return hasClerk
-    ? <ClerkProvider appearance={clerkAppearance}>{body}</ClerkProvider>
+    ? (
+      <ClerkProvider
+        appearance={clerkAppearance}
+        signInFallbackRedirectUrl="/workspace"
+        signUpFallbackRedirectUrl="/workspace"
+      >
+        {body}
+      </ClerkProvider>
+    )
     : body;
 }

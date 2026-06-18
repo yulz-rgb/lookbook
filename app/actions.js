@@ -53,7 +53,7 @@ export async function setActiveYachtAction(yachtId) {
     path: '/',
     maxAge: 60 * 60 * 24 * 365,
   });
-  revalidatePath('/');
+  revalidatePath('/workspace');
   return { ok: true };
 }
 
@@ -70,7 +70,7 @@ export async function createOrderAction({ name, totals, snapshot }) {
     snapshot,
     userId: ctx.user.id,
   });
-  revalidatePath('/');
+  revalidatePath('/workspace');
   return { ok: true, orderId: order.id, status: order.status };
 }
 
@@ -89,7 +89,7 @@ export async function advanceOrderAction({ orderId, notes }) {
     return { ok: false, error: `Your role cannot advance an order from ${current.status.replace('_', ' ')}.` };
   }
   const order = await advanceOrderStatus(ctx.yachtId, orderId, { userId: ctx.user.id, notes });
-  revalidatePath('/');
+  revalidatePath('/workspace');
   return { ok: true, status: order.status };
 }
 
@@ -111,7 +111,7 @@ export async function recordArtifactAction({ type, filename, contentBase64, cont
       type, blobUrl: url, orderProjectId: orderId || null, userId: ctx.user.id,
     });
     await logAudit(ctx.yachtId, ctx.user.id, 'EXPORT', 'ExportArtifact', artifact.id, { type, filename });
-    revalidatePath('/');
+    revalidatePath('/workspace');
     return { ok: true, url, id: artifact.id };
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
@@ -140,7 +140,7 @@ export async function addMemberAction({ email, role }) {
   }
   await addMembership(ctx.yachtId, user.id, ensureRole(role));
   await logAudit(ctx.yachtId, ctx.user.id, 'MEMBER_ADD', 'Membership', user.id, { email: clean, role });
-  revalidatePath('/');
+  revalidatePath('/workspace');
   return { ok: true, members: await listMembers(ctx.yachtId) };
 }
 
@@ -158,7 +158,7 @@ export async function updateMemberRoleAction({ membershipId, role }) {
   }
   await setMemberRole(ctx.yachtId, membershipId, nextRole);
   await logAudit(ctx.yachtId, ctx.user.id, 'MEMBER_ROLE', 'Membership', membershipId, { role: nextRole });
-  revalidatePath('/');
+  revalidatePath('/workspace');
   return { ok: true, members: await listMembers(ctx.yachtId) };
 }
 
@@ -175,7 +175,7 @@ export async function removeMemberAction({ membershipId }) {
   }
   await removeMember(ctx.yachtId, membershipId);
   await logAudit(ctx.yachtId, ctx.user.id, 'MEMBER_REMOVE', 'Membership', membershipId, {});
-  revalidatePath('/');
+  revalidatePath('/workspace');
   return { ok: true, members: await listMembers(ctx.yachtId) };
 }
 
@@ -188,6 +188,6 @@ export async function updateYachtNameAction({ name }) {
   if (!clean) return { ok: false, error: 'Name is required.' };
   await updateYacht(ctx.yachtId, { name: clean });
   await logAudit(ctx.yachtId, ctx.user.id, 'YACHT_UPDATE', 'Yacht', ctx.yachtId, { name: clean });
-  revalidatePath('/');
+  revalidatePath('/workspace');
   return { ok: true };
 }

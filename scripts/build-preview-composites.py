@@ -8,9 +8,10 @@ from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image, ImageFilter
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / '.venv-rembg'))
 
+from PIL import Image, ImageFilter
 from rembg import new_session, remove  # noqa: E402
 
 PREVIEW = ROOT / 'public' / 'preview'

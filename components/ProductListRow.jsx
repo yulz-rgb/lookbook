@@ -3,14 +3,14 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { money } from '../lib/calc';
 import { ProductAttribution } from './ProductAttribution';
+import { ProductPhoto } from './ProductPhoto';
 
 export function ProductListRow({ product, isSelected, onToggle, onEdit, roleMatch, readOnly = false }) {
   return (
     <article className={`product-list-row ${isSelected ? 'selected' : ''} ${roleMatch === false ? 'role-mismatch' : ''}`}>
       <div className="plr-thumb" style={{ background: product.swatch || '#eef4f9' }}>
         {product.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.imageUrl} alt="" />
+          <ProductPhoto src={product.imageUrl} alt="" className="plr-thumb-img" />
         ) : (
           <div className="product-photo-shirt" style={{ background: product.swatch, borderColor: product.accent, transform: 'scale(0.55)' }} />
         )}

@@ -8,6 +8,7 @@ import {
   productSwatchForColour,
 } from '../lib/productColour';
 import { ProductAttribution } from './ProductAttribution';
+import { ProductPhoto } from './ProductPhoto';
 
 export function ProductCard({
   product,
@@ -33,13 +34,11 @@ export function ProductCard({
   return (
     <article className={`product-card ${isSelected ? 'selected' : ''} ${product.active === false ? 'inactive' : ''}`}>
       <div className="product-card-image" style={{ background: imgBg }}>
-        <span className="brand-tag">{product.brand}</span>
-        {isSelected && <span className="in-look-badge">✓ In Look</span>}
+        {isSelected && <span className="in-look-badge">In look</span>}
         {product.active === false && <span className="inactive-badge">Inactive</span>}
         <div className="product-photo">
           {displayImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="product-photo-img" src={displayImage} alt={`${product.name} — ${activeColour}`} />
+            <ProductPhoto src={displayImage} alt={`${product.name} — ${activeColour}`} />
           ) : (
             <div className="product-photo-shirt" style={{ background: displaySwatch, borderColor: product.accent }} />
           )}

@@ -9,7 +9,7 @@ export default function SignInPage() {
       <div className="auth-shell">
         <AuthBrandPanel />
         <div className="auth-widget">
-          <SignIn />
+          <SignIn fallbackRedirectUrl="/workspace" forceRedirectUrl="/workspace" />
         </div>
       </div>
     </div>

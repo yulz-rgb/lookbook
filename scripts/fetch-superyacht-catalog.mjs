@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { extractEshopCatalog } from '../lib/catalogExtract.js';
+import { extractEshopCatalog, SUPERYACHT_GUEST_ACCESSORY_PATHS } from '../lib/catalogExtract.js';
 import { normalizeUniformProduct, validateUniformCatalog } from '../lib/uniformTaxonomy.js';
 
 const SOURCE_URL = 'https://www.thesuperyachtshop.com/';
@@ -46,6 +46,7 @@ async function main() {
     SOURCE_URL,
     fetchHtml,
     {
+      extraCategoryPaths: SUPERYACHT_GUEST_ACCESSORY_PATHS,
       onProgress: (p) => {
         if (p.phase === 'listing') {
           process.stdout.write(`\rCategories ${p.index}/${p.total} — ${p.category.slice(-48).padStart(48)}`);

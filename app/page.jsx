@@ -1,39 +1,49 @@
-import Workspace from '../components/Workspace';
-import { backendEnabled, hasBlob } from '../lib/config';
-import { getActiveContext } from '../lib/auth';
-import { getWorkspace, getActiveOrder, listArtifacts, listMembers } from '../lib/repository';
-import { can } from '../lib/permissions';
+import { LandingSite } from '../components/marketing/LandingSite';
+import { siteConfig } from '../lib/site';
 
-export const dynamic = 'force-dynamic';
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ProfessionalService',
+  name: siteConfig.name,
+  description: siteConfig.description,
+  url: siteConfig.url,
+  areaServed: siteConfig.serviceArea,
+  email: siteConfig.contactEmail,
+  serviceType: 'Yacht crew uniform planning and procurement preparation',
+};
 
-export default async function Page() {
-  if (!backendEnabled) {
-    return <Workspace mode="local" canUpload={hasBlob} />;
-  }
+export const metadata = {
+  title: {
+    default: `${siteConfig.name} — Yacht Crew Uniform Planning`,
+    template: `%s | ${siteConfig.name}`,
+  },
+  description: siteConfig.description,
+  metadataBase: new URL(siteConfig.url),
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    locale: 'en_GB',
+    url: siteConfig.url,
+    siteName: siteConfig.name,
+    title: `${siteConfig.name} — Yacht Crew Uniform Planning`,
+    description: siteConfig.description,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${siteConfig.name} — Yacht Crew Uniform Planning`,
+    description: siteConfig.description,
+  },
+  robots: { index: true, follow: true },
+};
 
-  const ctx = await getActiveContext();
-  if (!ctx) {
-    return <Workspace mode="local" canUpload={hasBlob} />;
-  }
-
-  const [data, activeOrder, artifacts, members] = await Promise.all([
-    getWorkspace(ctx.yachtId),
-    getActiveOrder(ctx.yachtId),
-    listArtifacts(ctx.yachtId),
-    can(ctx.role, 'member.manage') ? listMembers(ctx.yachtId) : Promise.resolve([]),
-  ]);
-
-  const authInfo = {
-    signedIn: true,
-    userId: ctx.user.id,
-    activeYachtId: ctx.yachtId,
-    yachtName: ctx.yacht?.name || '',
-    role: ctx.role,
-    yachts: ctx.memberships.map((m) => ({ id: m.yachtId, name: m.yacht.name })),
-    activeOrder,
-    artifacts,
-    members,
-  };
-
-  return <Workspace mode="server" initialData={data} authInfo={authInfo} canUpload={hasBlob && can(ctx.role, 'product.upload')} />;
+export default function HomePage() {
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <LandingSite />
+    </>
+  );
 }

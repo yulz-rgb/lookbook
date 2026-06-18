@@ -15,6 +15,8 @@
     "catalog:superyacht": "node scripts/fetch-superyacht-catalog.mjs",
     "catalog:superyacht:repair": "node scripts/repair-superyacht-catalog.mjs",
     "catalog:superyacht:patch": "node scripts/patch-superyacht-catalog.mjs",
+    "catalog:superyacht:guest": "node scripts/patch-superyacht-guest-accessories.mjs",
+    "catalog:superyacht:verify-sections": "node scripts/verify-superyacht-sections.mjs",
     "catalog:smallwoods": "node scripts/fetch-smallwoods-catalog.mjs",
     "catalog:supplier": "node scripts/fetch-supplier-catalog.mjs",
     "catalog:all": "node scripts/fetch-all-supplier-catalogs.mjs",
@@ -48,6 +50,7 @@
     "playwright": "^1.52.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "sharp": "^0.35.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
