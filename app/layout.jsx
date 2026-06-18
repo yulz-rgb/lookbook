@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import { Analytics } from '@vercel/analytics/next';
 import { hasClerk } from '../lib/config';
+import { ChunkLoadRecovery } from '../components/ChunkLoadRecovery';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -39,6 +40,7 @@ export default function RootLayout({ children }) {
   const body = (
     <html lang="en" className={inter.variable}>
       <body className={inter.className}>
+        <ChunkLoadRecovery />
         {children}
         <Analytics />
       </body>
