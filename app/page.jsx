@@ -14,6 +14,7 @@ import jsPDF from 'jspdf';
 
 const money = (v) => `€${Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const uid = (p) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
+const NAV_ICONS = { 'tops-shirts': '👕', 'dresses': '👗', 'bottoms': '🩳', 'outerwear': '🧥', 'shoes': '👞', 'accessories': '🎩' };
 const storageKeys = { products: 'yachtUniform.products.v2', looks: 'yachtUniform.looks.v2', crew: 'yachtUniform.crew.v2' };
 
 function useLocalData(key, fallback) {
@@ -80,10 +81,14 @@ function matchesSubFilter(product, subFilter) {
 }
 
 function ProductCard({ product, isSelected, onToggle, onEdit }) {
+  const imgBg = isSelected
+    ? `radial-gradient(ellipse at 65% 25%, ${product.swatch}55 0%, #e8f2fa 55%, #f4f8fc 100%)`
+    : `radial-gradient(ellipse at 65% 25%, ${product.swatch}28 0%, #eef4f9 55%, #f7f9fc 100%)`;
   return (
     <article className={`product-card ${isSelected ? 'selected' : ''}`}>
-      <div className="product-card-image">
+      <div className="product-card-image" style={{ background: imgBg }}>
         <span className="brand-tag">{product.brand}</span>
+        {isSelected && <span className="in-look-badge">✓ In Look</span>}
         <div className="product-photo">
           <div className="product-photo-shirt" style={{ background: product.swatch, borderColor: product.accent }} />
         </div>
@@ -354,7 +359,9 @@ export default function Page() {
             <button className="nav-add-btn" onClick={addLook}><Plus size={12}/> Add Look</button>
             {looks.map((l) => (
               <button key={l.id} className={`nav-look-btn ${l.id === activeLook.id ? 'active' : ''}`} onClick={() => setActiveLookId(l.id)}>
-                {l.name}{l.id === activeLook.id && <span className="dot" />}
+                <span className="nav-look-name">{l.name}</span>
+                <span className="nav-look-price">{money(allLookTotals.find((lt) => lt.id === l.id)?.subtotal || 0)}</span>
+                {l.id === activeLook.id && <span className="dot" />}
               </button>
             ))}
           </div>
@@ -364,7 +371,8 @@ export default function Page() {
             {navCategories.map((nc) => (
               <button key={nc.id} className={`nav-cat-btn ${activeNavCat === nc.id ? 'active' : ''}`}
                 onClick={() => { setActiveNavCat(nc.id); setSubFilter('All'); }}>
-                {nc.label}
+                <span className="nav-cat-icon">{NAV_ICONS[nc.id]}</span>
+                <span className="nav-cat-label">{nc.label}</span>
               </button>
             ))}
           </div>
@@ -383,8 +391,19 @@ export default function Page() {
                 </div>
                 <Mannequin bodyType={activeLook.bodyType} selectedProducts={selectedProducts} />
               </div>
+              <div className="preview-stats">
+                <div className="preview-stats-item">
+                  <span className="psi-label">Items</span>
+                  <span className="psi-value">{selectedProducts.length}</span>
+                </div>
+                <div className="preview-stats-divider" />
+                <div className="preview-stats-item">
+                  <span className="psi-label">Look Total</span>
+                  <span className="psi-value">{money(selectedProducts.reduce((s, p) => s + Number(p.price || 0), 0))}</span>
+                </div>
+              </div>
               <div className="preview-actions">
-                <button className="preview-action-btn" onClick={() => setHideBg((b) => !b)}>{hideBg ? 'Show Background' : 'Hide Background'}</button>
+                <button className="preview-action-btn" onClick={() => setHideBg((b) => !b)}>{hideBg ? 'Show Bg' : 'Hide Bg'}</button>
                 <button className="preview-action-btn" onClick={() => patchActiveLook({ productIds: [] })}>Reset Look</button>
               </div>
             </section>
@@ -393,7 +412,7 @@ export default function Page() {
             <section className="catalog-panel no-print">
               <div className="catalog-header">
                 <div className="catalog-title-row">
-                  <h2>{activeNav.label}</h2>
+                  <h2>{activeNav.label} <span className="result-count">{filteredProducts.length}</span></h2>
                   <div className="catalog-controls">
                     <label className="sort-label">Sort by:</label>
                     <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
@@ -425,7 +444,11 @@ export default function Page() {
                       onToggle={toggleProduct} onEdit={(prod) => { setEditProduct(prod); setShowAdmin(true); }} />
                   ))}
                   {filteredProducts.length === 0 && (
-                    <p style={{ color: '#94a3b8', gridColumn: '1/-1', padding: 20 }}>No products match your filters.</p>
+                    <div className="catalog-empty">
+                      <div className="catalog-empty-icon">🔍</div>
+                      <p>No products match your filters.</p>
+                      <small>Try adjusting your search or category filters.</small>
+                    </div>
                   )}
                 </div>
               </div>
@@ -440,9 +463,11 @@ export default function Page() {
                 <div className="budget-row"><label>Logo / Embroidery per item</label><input className="budget-input" type="number" value={logoCost} onChange={(e) => setLogoCost(e.target.value)} /></div>
                 <div className="budget-row"><label>Spare Stock Allowance %</label><input className="budget-input" type="number" value={sparePercent} onChange={(e) => setSparePercent(e.target.value)} /></div>
                 <div className="budget-divider" />
-                <div className="budget-row"><label>Items Total</label><strong>{money(itemsTotal)}</strong></div>
-                <div className="budget-row"><label>Logo / Embroidery Total</label><strong>{money(logoTotal)}</strong></div>
-                <div className="budget-row"><label>Spare Stock ({sparePercent}%)</label><strong>{money(spareTotal)}</strong></div>
+                <div className="budget-results">
+                  <div className="budget-row"><label>Items Total</label><strong>{money(itemsTotal)}</strong></div>
+                  <div className="budget-row"><label>Logo / Embroidery Total</label><strong>{money(logoTotal)}</strong></div>
+                  <div className="budget-row"><label>Spare Stock ({sparePercent}%)</label><strong>{money(spareTotal)}</strong></div>
+                </div>
                 <div className="grand-total-box"><span>Grand Total</span><strong>{money(grandTotal)}</strong></div>
               </div>
 
