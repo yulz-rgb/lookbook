@@ -8,6 +8,7 @@ import {
   extractShopifyCatalog,
   fetchAllShopifyProducts,
 } from '../lib/catalogExtract.js';
+import { normalizeUniformProduct } from '../lib/uniformTaxonomy.js';
 
 const SOURCE_URL = 'https://www.marinayachtwear.com/';
 const SUPPLIER_NAME = 'Marina Yacht Wear';
@@ -74,7 +75,16 @@ async function main() {
 
   const csvRows = [
     CATALOG_COLUMNS,
-    ...records.map((raw) => CATALOG_COLUMNS.map((col) => String(raw[col] ?? ''))),
+    ...catalogProducts.map((p) => CATALOG_COLUMNS.map((col) => {
+      if (col === 'colours') return (p.colours || []).join('|');
+      if (col === 'fit') return (p.fit || []).join('|');
+      if (col === 'roleTags') return (p.roleTags || []).join('|');
+      if (col === 'colourImages') return JSON.stringify(p.colourImages || {});
+      if (col === 'currency') return 'EUR';
+      if (col === 'vatRate') return '0';
+      if (col === 'active') return p.active === false ? 'false' : 'true';
+      return String(p[col] ?? '');
+    })),
   ];
   const csvPath = join(root, 'docs/marina-yacht-wear-catalog.csv');
   writeFileSync(csvPath, toCsv(csvRows));
@@ -82,7 +92,7 @@ async function main() {
   const catalogProducts = records.map((raw) => {
     const handle = handleByTitle.get(raw.name)
       || raw.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    return recordToProduct(raw, handle);
+    return normalizeUniformProduct(recordToProduct(raw, handle));
   });
 
   const jsPath = join(root, 'lib/marinaCatalog.js');

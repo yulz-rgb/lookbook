@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Anchor, ChevronDown, Download, FileDown, FileText, Filter, Menu, Plus,
   Search, Settings, Ship, SlidersHorizontal, Trash2, Upload,
@@ -10,14 +11,14 @@ import {
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
-  categories, defaultCrew, defaultLooks, defaultProducts, bodyTypes, roles, productMatchesBodyType,
-  navCategories, NAV_SECTION_LABELS, vessels, isDemoCatalog, productMatchesNav, catalogNavForProduct,
-  productMatchesDressFilter,
+  categories, defaultCrew, defaultLooks, defaultProducts, marinaDefaultProducts, bodyTypes, roles, productMatchesBodyType,
+  navCategories, NAV_SECTION_LABELS, vessels, isDemoCatalog, productMatchesNav, productMatchesSubFilter, catalogNavForProduct,
 } from '../lib/catalog';
 import { normalizeCrewMember } from '../lib/crew';
 import { capabilitiesFor, canAdvance, STAGE_ACTOR } from '../lib/permissions';
-import { Mannequin } from './Mannequin';
 import { ModelPreview } from './ModelPreview';
+import { Mannequin } from './Mannequin';
+import { LookVisual } from './LookVisual';
 import { ProductCard } from './ProductCard';
 import { ProductListRow } from './ProductListRow';
 import { ProductEditor } from './ProductEditor';
@@ -25,7 +26,7 @@ import { CatalogImport } from './CatalogImport';
 import { CrewImport } from './CrewImport';
 import { TeamPanel } from './TeamPanel';
 import { ProductAttribution } from './ProductAttribution';
-import { enrichProductsWithDefaults, productsMissingAttribution, resolveCatalogProducts } from '../lib/catalogAttribution';
+import { mergeCatalogWithDefaults, productsMissingAttribution, resolveCatalogProducts, isSparseServerCatalog } from '../lib/catalogAttribution';
 import { defaultProductColour, parseColourImages, withProductColour } from '../lib/productColour';
 import {
   money, buildLookTotals, computeBudget, buildOrderSummary, buildSizeAwareOrderSummary,
@@ -52,12 +53,12 @@ const NAV_ICONS = {
 };
 const LOCAL_KEY = 'yachtUniform.workspace.v5';
 const CATALOG_VERSION_KEY = 'yachtUniform.catalogVersion';
-const CATALOG_VERSION = 'marina-v7-persist-imports';
+const CATALOG_VERSION = 'all-suppliers-v3';
 const ORDER_HISTORY_KEY = 'yachtUniform.orders.v1';
 
 const DEFAULT_SETTINGS = {
   vessel: vessels[0],
-  priceNote: 'Marina Yacht Wear catalog prices — confirm quotes before ordering.',
+  priceNote: 'Catalog prices ex VAT — confirm quotes before ordering.',
   currency: 'EUR',
   logoCost: 15,
   sparePercent: 10,
@@ -110,48 +111,18 @@ function normalizeCrewList(crew = [], looks = []) {
 function productMatchesRole(product, role) {
   if (!role) return true;
   const tags = product.roleTags || [];
-  if (!tags.length) return true;
+  if (!tags.length) return false;
   const aliases = {
-    'chief-stew': ['chief-stew', 'interior', 'boss'],
+    'chief-stew': ['chief-stew', 'interior'],
     interior: ['interior', 'chief-stew'],
-    captain: ['captain', 'boss', 'deck'],
-    deck: ['deck', 'engineer'],
-    engineer: ['engineer', 'deck'],
+    captain: ['captain', 'boss'],
+    deck: ['deck'],
+    engineer: ['engineer'],
     chef: ['chef'],
     spa: ['spa'],
   };
   const allowed = new Set([role, ...(aliases[role] || [])]);
   return tags.some((t) => allowed.has(t));
-}
-
-function matchesSubFilter(product, subFilter) {
-  if (!subFilter || subFilter === 'All') return true;
-  if (subFilter === 'Dresses') return productMatchesDressFilter(product);
-  const hay = `${product.name} ${product.fabric} ${product.imageHint} ${product.details || ''}`.toLowerCase();
-  const roleHay = (product.roleTags || []).join(' ').toLowerCase();
-  const map = {
-    Polos: 'polo', 'T-Shirts': 'shirt', Shorts: 'shorts', Shirts: 'shirt', Blouses: 'blouse',
-    'Epaulette Shirts': 'epaulette', 'Officer Shirts': 'officer', Trousers: 'trouser', Knitwear: 'knit',
-    Dresses: 'dress', Skorts: 'skort', Jackets: 'jacket', Aprons: 'apron', Shoes: 'shoe',
-    Overalls: 'overall', Softshell: 'softshell', Tunics: 'tunic',
-    Jacket: 'jacket', Fleece: 'fleece', 'Foul Weather': 'foul',
-    'Non-Marking': 'non-marking', Caps: 'cap', Belts: 'belt', Sunglasses: 'sunglass',
-  };
-  const epauletteDept = {
-    Deck: ['deck', 'anchor', 'captain', 'bosun'],
-    Engineering: ['engineer', 'propeller', 'engineering'],
-    Interior: ['interior', 'stew', 'crescent', 'chief-stew'],
-    Galley: ['chef', 'galley', 'knife', 'fork'],
-  };
-  if (epauletteDept[subFilter]) {
-    return epauletteDept[subFilter].some((term) => hay.includes(term) || roleHay.includes(term));
-  }
-  const term = (map[subFilter] || subFilter).toLowerCase();
-  if (['deck', 'interior', 'galley'].includes(term)) {
-    const deptTerm = term === 'galley' ? 'chef' : term;
-    return hay.includes(term) || roleHay.includes(deptTerm);
-  }
-  return hay.includes(term);
 }
 
 function isLegacyBootstrapCatalog(storedProducts = []) {
@@ -235,6 +206,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const [orderHistory, setOrderHistory] = useState([]);
   const pdfRef = useRef(null);
   const saveTimer = useRef(null);
+  const sparseCatalogSynced = useRef(false);
 
   function toggleUniformNav() {
     if (uniformNavOpen) setExpandedNavCat(null);
@@ -263,11 +235,11 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
           if (isLegacyBootstrapCatalog(nextProducts)) {
             nextProducts = defaultProducts;
           } else {
-            nextProducts = enrichProductsWithDefaults(nextProducts, defaultProducts);
+            nextProducts = mergeCatalogWithDefaults(nextProducts, defaultProducts);
           }
         }
         if (storedVersion !== CATALOG_VERSION || (data.products && productsMissingAttribution(data.products))) {
-          nextProducts = enrichProductsWithDefaults(nextProducts || defaultProducts, defaultProducts);
+          nextProducts = mergeCatalogWithDefaults(nextProducts || defaultProducts, defaultProducts);
           window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
         }
         /* eslint-disable react-hooks/set-state-in-effect */
@@ -287,6 +259,19 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   }, []);
 
   useEffect(() => {
+    if (mode !== 'server' || !canEdit || sparseCatalogSynced.current) return;
+    const stored = initialData?.products || [];
+    if (!isSparseServerCatalog(stored, defaultProducts)) return;
+    if (products.length <= stored.length) return;
+    sparseCatalogSynced.current = true;
+    (async () => {
+      setSaveState('saving');
+      const res = await saveWorkspaceAction({ products, looks, crew, settings });
+      setSaveState(res?.ok ? 'saved' : 'error');
+    })();
+  }, [mode, canEdit, initialData?.products, products, looks, crew, settings]);
+
+  useEffect(() => {
     if (mode === 'local') {
       try {
         window.localStorage.setItem(LOCAL_KEY, JSON.stringify({
@@ -301,9 +286,9 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
       return;
     }
     if (!canEdit) return; // read-only roles never write back
-    setSaveState('saving');
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      setSaveState('saving');
       const res = await saveWorkspaceAction({ products, looks, crew, settings });
       setSaveState(res?.ok ? 'saved' : 'error');
     }, 900);
@@ -320,16 +305,17 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     setColourChoices((prev) => ({ ...prev, [product.id]: colour }));
   }
 
-  function colourForProduct(product) {
-    return colourChoices[product?.id] || defaultProductColour(product);
-  }
+  const colourForProduct = useCallback(
+    (product) => colourChoices[product?.id] || defaultProductColour(product),
+    [colourChoices],
+  );
 
   const selectedProducts = useMemo(
     () => (activeLook?.productIds || [])
       .map((id) => productsById[id])
       .filter((p) => p && productMatchesBodyType(p, activeLook?.bodyType || 'woman'))
       .map((p) => withProductColour(p, colourForProduct(p))),
-    [productsById, activeLook, colourChoices],
+    [productsById, activeLook, colourForProduct],
   );
 
   const filteredProducts = useMemo(() => {
@@ -337,9 +323,9 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
       p.active !== false &&
       productMatchesNav(p, activeNav) &&
       productMatchesBodyType(p, activeLook?.bodyType || 'woman') &&
-      matchesSubFilter(p, subFilter) &&
+      productMatchesSubFilter(p, subFilter, activeNav.id) &&
       productMatchesRole(p, advancedFilters.role || roleFilter) &&
-      (!search || `${p.name} ${p.brand}`.toLowerCase().includes(search.toLowerCase())));
+      (!search || `${p.name} ${p.brand} ${p.supplierName || ''}`.toLowerCase().includes(search.toLowerCase())));
 
     if (advancedFilters.supplier) {
       const q = advancedFilters.supplier.toLowerCase();
@@ -370,7 +356,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
       ...look,
       products: look.products.map((p) => withProductColour(p, colourForProduct(p))),
     })),
-    [lookTotals, colourChoices],
+    [lookTotals, colourForProduct],
   );
   const budget = useMemo(() => computeBudget(crew, lookTotals, settings), [crew, lookTotals, settings]);
   const orderSummary = useMemo(() => buildOrderSummary(crew, looks, products, settings), [crew, looks, products, settings]);
@@ -622,7 +608,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
           <div className="demo-banner-actions">
             <button type="button" className="demo-banner-btn" onClick={resetDemo}>Reload catalog</button>
             <button type="button" className="demo-banner-btn primary" onClick={() => setShowImport(true)}>Import supplier catalog</button>
-            <a href="/sign-in" className="demo-banner-link">Sign in</a>
+            <Link href="/sign-in" className="demo-banner-link">Sign in</Link>
             <span className="demo-banner-note">for multi-yacht persistence</span>
           </div>
         </div>
@@ -872,8 +858,9 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
 
           <div className="workspace-grid">
             <section className="preview-panel no-print">
-              <div className="preview-look-name">Current Look: {activeLook.name}</div>
+              <div className="preview-look-name">Current look · {activeLook.name}</div>
               <ModelPreview
+                key={activeLook.bodyType}
                 bodyType={activeLook.bodyType}
                 selectedProducts={selectedProducts}
               />
@@ -1034,7 +1021,9 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               <div className="current-look-scroll">
                 {selectedProducts.map((p) => (
                   <div key={p.id} className="current-item">
-                    <div className="current-item-img"><Mannequin bodyType={activeLook.bodyType} selectedProducts={[p]} compact /></div>
+                    <div className="current-item-img">
+                      <LookVisual bodyType={activeLook.bodyType} products={[p]} variant="item" />
+                    </div>
                     <div className="current-item-info">
                       <div className="name">{p.name.split(' ').slice(0, 2).join(' ')}</div>
                       <ProductAttribution product={p} compact />
@@ -1054,7 +1043,9 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                     onKeyDown={(e) => e.key === 'Enter' && setActiveLookId(look.id)}
                     role="button"
                     tabIndex={0}>
-                    <div className="look-thumb-card"><Mannequin bodyType={look.bodyType} selectedProducts={look.products} compact /></div>
+                    <div className="look-thumb-card">
+                      <LookVisual bodyType={look.bodyType} products={look.products} variant="thumb" />
+                    </div>
                     <div className="look-thumb-label">{look.name}</div>
                   </div>
                 ))}
