@@ -182,9 +182,13 @@ button { cursor: pointer; }
   background: var(--gold); border-radius: 2px; flex-shrink: 0;
 }
 .preview-frame {
-  flex: 1; border-radius: var(--radius); overflow: hidden; position: relative;
+  flex: 0 0 420px;
+  height: 420px;
+  max-height: 420px;
+  min-height: 420px;
+  border-radius: var(--radius); overflow: hidden; position: relative;
   background: linear-gradient(170deg, #b8d8ef 0%, #d0e8f7 22%, #efefed 56%, #d4c8b4 78%, #b8a07e 100%);
-  border: 1px solid rgba(200,220,238,.8); min-height: 320px;
+  border: 1px solid rgba(200,220,238,.8);
   display: flex; align-items: flex-end; justify-content: center;
   transition: background .3s;
   box-shadow: var(--shadow-sm);
@@ -576,8 +580,8 @@ small { color:var(--muted); }
   .left-nav.open { transform: translateX(0); }
   .mobile-nav-toggle { display: inline-flex !important; }
   .workspace-grid { grid-template-columns: 1fr; }
-  .preview-panel { display: flex; min-height: 240px; }
-  .preview-frame { min-height: 200px; }
+  .preview-panel { display: flex; }
+  .preview-frame { flex: 0 0 360px; height: 360px; max-height: 360px; min-height: 360px; }
   .bottom-zone { grid-template-columns: 1fr; max-height: none; }
   .ops-dashboard-header { flex-direction: column; }
   .ops-task-grid { grid-template-columns: 1fr; }
