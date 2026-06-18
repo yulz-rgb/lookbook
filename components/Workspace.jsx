@@ -179,17 +179,36 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   useEffect(() => {
     if (mode !== 'local') return;
     try {
+      const catalogVersion = window.localStorage.getItem(CATALOG_VERSION_KEY);
       const raw = window.localStorage.getItem(LOCAL_KEY);
-      if (raw) {
-        const data = JSON.parse(raw);
+      const needsMarinaCatalog = catalogVersion !== CATALOG_VERSION;
+
+      if (needsMarinaCatalog) {
         /* eslint-disable react-hooks/set-state-in-effect */
-        if (data.products) setProducts(data.products);
-        if (data.looks) setLooks(data.looks);
-        if (data.crew) setCrew(normalizeCrewList(data.crew, data.looks || looks));
-        if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
-        if (data.orderHistory) setOrderHistory(data.orderHistory);
-        if (data.approvalLog) setApprovalLog(data.approvalLog);
+        setProducts(defaultProducts);
+        setLooks(defaultLooks);
+        setCrew(normalizeCrewList(defaultCrew, defaultLooks));
+        setSettings((s) => ({ ...DEFAULT_SETTINGS, ...s, priceNote: DEFAULT_SETTINGS.priceNote }));
+        setActiveLookId(defaultLooks[0].id);
+        window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
         /* eslint-enable react-hooks/set-state-in-effect */
+      } else if (raw) {
+        const data = JSON.parse(raw);
+        if (isStaleLocalCatalog(data.products)) {
+          setProducts(defaultProducts);
+          setLooks(defaultLooks);
+          setCrew(normalizeCrewList(defaultCrew, defaultLooks));
+          setActiveLookId(defaultLooks[0].id);
+        } else {
+          /* eslint-disable react-hooks/set-state-in-effect */
+          if (data.products?.length) setProducts(data.products);
+          if (data.looks?.length) setLooks(data.looks);
+          if (data.crew?.length) setCrew(normalizeCrewList(data.crew, data.looks || looks));
+          if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+          if (data.orderHistory) setOrderHistory(data.orderHistory);
+          if (data.approvalLog) setApprovalLog(data.approvalLog);
+          /* eslint-enable react-hooks/set-state-in-effect */
+        }
       }
       const ordersRaw = window.localStorage.getItem(ORDER_HISTORY_KEY);
       if (ordersRaw) setOrderHistory(JSON.parse(ordersRaw));
@@ -351,17 +370,24 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
 
   function deleteCrew(id) { setCrew(crew.filter((c) => c.id !== id)); }
 
-  function mergeImportedProducts(imported) {
+  function mergeImportedProducts(imported, { replace = false } = {}) {
+    const bulkReplace = replace || imported.length >= 100;
+    if (bulkReplace) {
+      setProducts(imported.map(normalizeImportedProduct));
+      setShowImport(false);
+      return;
+    }
     setProducts((prev) => {
       const bySku = new Map(prev.filter((p) => p.sku).map((p) => [p.sku, p]));
       const next = [...prev];
       for (const p of imported) {
-        const existing = p.sku ? bySku.get(p.sku) : null;
+        const normalised = normalizeImportedProduct(p);
+        const existing = normalised.sku ? bySku.get(normalised.sku) : null;
         if (existing) {
           const idx = next.findIndex((x) => x.id === existing.id);
-          next[idx] = { ...existing, ...p, id: existing.id };
+          next[idx] = { ...existing, ...normalised, id: existing.id };
         } else {
-          next.push(p);
+          next.push(normalised);
         }
       }
       return next;
@@ -503,6 +529,9 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     setActiveLookId(defaultLooks[0].id);
     setOrder(null);
     setApprovalLog([]);
+    try {
+      window.localStorage.setItem(CATALOG_VERSION_KEY, CATALOG_VERSION);
+    } catch {}
   };
 
   return (
@@ -729,7 +758,12 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             <section className="preview-panel no-print">
               <div className="preview-look-name">Current Look: {activeLook.name}</div>
               <div className={`preview-frame ${hideBg ? 'no-bg' : ''}`}>
-                <Mannequin bodyType={activeLook.bodyType} selectedProducts={selectedProducts} />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="preview-model"
+                  src={activeLook.bodyType === 'man' ? '/preview/model-man.jpg' : '/preview/model-woman.jpg'}
+                  alt={`${activeLook.bodyType === 'man' ? 'Male' : 'Female'} crew uniform model`}
+                />
               </div>
               <div className="preview-stats">
                 <div className="preview-stats-item">
