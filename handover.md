@@ -9,10 +9,23 @@ The purpose of the platform is to move from a demo configurator into a productio
 - dependable export and handoff artifacts
 - maintainable front-end structure for ongoing iteration
 
-## CURRENT STATUS — RESUME HERE (updated 2026-06-18 17:05 UTC+2)
-The full launch-readiness plan (`/Users/lana/.cursor/plans/launch_readiness_7342b80a.plan.md`) has been implemented and verified. 8 of 9 to-dos are complete; only the owner-gated production cutover remains.
+## CURRENT STATUS — LAUNCHED (updated 2026-06-18 17:15 UTC+2)
+The full launch-readiness plan (`/Users/lana/.cursor/plans/launch_readiness_7342b80a.plan.md`) is implemented, verified, and **deployed to production**. All 9 to-dos are complete.
 
-**Verified green:** `npm run lint`, `npm test` (17 passing), `npm run build`.
+**Live production URL:** https://yachtuniform.vercel.app (running in full backend mode: Clerk auth + Neon Postgres + Vercel Blob). Signed-out requests to `/` correctly 307-redirect to `/sign-in`.
+
+**Provisioned managed services (Vercel project `yulzs-projects/yachtuniform`):**
+- Neon Postgres `neon-byzantium-book` (Free plan) — migration `0001_init` applied; demo yacht seeded (12 products, 4 looks, 6 crew).
+- Clerk `clerk-apricot-canvas` (Free plan) — auth live; `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up` set across all envs.
+- Vercel Blob `yacht-uniform-blob` (public) — product image uploads.
+- `prisma/schema.prisma` datasource uses `directUrl` (`DATABASE_URL_UNPOOLED`) for migrations over Neon.
+
+**Remaining owner tasks (no code needed):**
+1. Sign up the first owner account at https://yachtuniform.vercel.app/sign-up.
+2. Import real supplier data via in-app "Import Catalog CSV" (template `docs/catalog-template.csv`); demo data is bootstrap-only.
+3. Invite crew/captain users and run `docs/SMOKE_TEST.md`.
+
+**Verified green:** `npm run lint`, `npm test` (17 passing), `npm run build`, production deploy READY.
 
 **What exists now:**
 - Runs in two modes automatically: Local (no env -> localStorage + demo data) and Production (env set -> Clerk auth + Neon/Postgres, per-yacht isolation).
@@ -23,23 +36,9 @@ The full launch-readiness plan (`/Users/lana/.cursor/plans/launch_readiness_7342
 - Approval workflow (Draft -> Captain -> Owner -> Approved) with locked-totals snapshots.
 - Tests (Vitest), CI (`.github/workflows/ci.yml`), `.env.example`, error/loading/not-found UI, Vercel Analytics, docs (`README.md`, `docs/LAUNCH.md`, `docs/SMOKE_TEST.md`, `docs/catalog-template.csv`).
 
-**THE ONLY REMAINING STEP (blocked on a one-time human browser action):**
-Provisioning Neon + Clerk + Blob requires accepting marketplace terms in a browser, then a non-interactive deploy. Full runbook in `docs/LAUNCH.md`. Quick version:
-1. Accept terms (browser): Neon `https://vercel.com/yulzs-projects/~/integrations/accept-terms/neon?source=cli`, Clerk `https://vercel.com/yulzs-projects/~/integrations/accept-terms/clerk?source=cli`; create a Blob store in the Vercel dashboard Storage tab.
-2. Then run (non-interactive):
-   ```bash
-   vercel integration add neon --no-claim -e production -e preview -e development
-   vercel integration add clerk --no-claim -e production -e preview -e development
-   vercel env pull .env.local
-   npx prisma migrate deploy
-   npm run db:seed            # optional demo yacht for smoke testing
-   git push origin main && npx vercel --prod --yes
-   ```
-3. Verify with `docs/SMOKE_TEST.md`, then log the deploy URL in the Action Log below.
+**Redeploy after future changes:** `git push origin main && npx vercel --prod --yes`. To re-pull provisioned env vars locally: `vercel env pull .env.local`. Prisma CLI reads `.env` (not `.env.local`), so for local DB commands run `set -a; . ./.env.local; set +a; npx prisma migrate deploy`.
 
-**Real supplier data:** to be loaded post-provision via in-app "Import Catalog CSV" (template: `docs/catalog-template.csv`). Demo data is bootstrap-only.
-
-**Git state:** the launch-readiness changes are UNCOMMITTED in the working tree (run `git status` — ~19 changed paths) and NOT pushed. A new chat should NOT re-run the plan from scratch; pick up at the provisioning step above. Commit/push happens as part of the deploy step (step 2 command block).
+**Git state:** all launch changes are committed and pushed to `main`; production is deployed and aliased to https://yachtuniform.vercel.app.
 
 ## Deploy Workflow (required)
 After every `git push` to GitHub, **always deploy to Vercel production** before considering the task done.
@@ -92,3 +91,4 @@ See `.env.example`. Provision via Vercel Marketplace (`vercel integration add ne
   - Clerk: https://vercel.com/yulzs-projects/~/integrations/accept-terms/clerk?source=cli
   - Blob: create a store in the Vercel dashboard (Storage tab) or `vercel blob store add`.
   After accepting terms, re-run: `vercel integration add neon --no-claim -e production -e preview -e development` (and same for `clerk`), then `vercel env pull .env.local`, `npx prisma migrate deploy`, optional `npm run db:seed`, then `git push origin main && npx vercel --prod --yes`.
+- 2026-06-18 17:15 (UTC+2): LAUNCHED. Owner accepted marketplace terms; provisioned Neon (`neon-byzantium-book`, Free), Clerk (`clerk-apricot-canvas`, Free), and public Blob store (`yacht-uniform-blob`). Added `directUrl`/`DATABASE_URL_UNPOOLED` to Prisma datasource; applied migration `0001_init` to Neon and seeded demo yacht (12 products, 4 looks, 6 crew). Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL`/`SIGN_UP_URL` across all envs and fixed `proxy.js` to `redirectToSignIn()` for signed-out users (was rewriting to 404). Deployed production `dpl_4emb7jPt2s9rNVwBR8Xr1G129kWS` then `dpl_…3syju8iyi` → https://yachtuniform.vercel.app (Ready). Verified `/` 307-redirects to `/sign-in`; lint/tests/build all green.
