@@ -3,7 +3,7 @@
 // Mannequin preview with layered garment shapes. Falls back to a CSS shape when
 // a product has no real image; uses the product photo when imageUrl is present.
 
-export function GarmentShape({ product, showLabel = true }) {
+export function GarmentShape({ product, showLabel = false }) {
   if (!product) return null;
   const fill = product.swatch || '#ffffff';
   const stroke = product.accent || '#0b1f3a';
@@ -14,6 +14,7 @@ export function GarmentShape({ product, showLabel = true }) {
     <img className="garment-photo" src={product.imageUrl} alt={product.name || ''} />
   ) : null;
   const shapes = {
+    polo: <div className="garment polo" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
     dress: <div className="garment dress" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
     shirt: <div className="garment shirt" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
     jacket: <div className="garment jacket" style={{ background: fill, borderColor: stroke }}>{imageOverlay}{showLabel && !product.imageUrl && <span>{label}</span>}</div>,
@@ -37,13 +38,14 @@ export function Mannequin({ bodyType, selectedProducts, compact = false }) {
       <div className="body torso-base" />
       <div className="body arm left" /><div className="body arm right" />
       <div className="body leg left" /><div className="body leg right" />
-      {byCategory.dresses && bodyType === 'woman' ? <GarmentShape product={byCategory.dresses} showLabel={!compact} /> : <>
-        <GarmentShape product={byCategory.tops || byCategory.shirts} showLabel={!compact} />
-        <GarmentShape product={byCategory.bottoms} showLabel={!compact} />
+      {byCategory.dresses && bodyType === 'woman' ? <GarmentShape product={byCategory.dresses} /> :
+        byCategory.engineering ? <GarmentShape product={byCategory.engineering} /> : <>
+        <GarmentShape product={byCategory.tops || byCategory.shirts || byCategory.epaulettes || byCategory['chef-wear'] || byCategory['spa-wear']} />
+        <GarmentShape product={byCategory.bottoms} />
       </>}
-      <GarmentShape product={byCategory.outerwear} showLabel={!compact} />
-      <GarmentShape product={byCategory.shoes} showLabel={!compact} />
-      {accessories.map((p) => <GarmentShape key={p.id} product={p} showLabel={!compact} />)}
+      <GarmentShape product={byCategory.outerwear} />
+      <GarmentShape product={byCategory.shoes} />
+      {accessories.map((p) => <GarmentShape key={p.id} product={p} />)}
     </div>
   );
 }
