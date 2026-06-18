@@ -1,24 +1,42 @@
 {
-  "name": "yacht-uniform-lookbook-template",
+  "name": "yacht-uniform-lookbook",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:seed": "node prisma/seed.mjs"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
   },
   "dependencies": {
-    "@react-pdf/renderer": "latest",
-    "html2canvas": "latest",
-    "jspdf": "latest",
-    "lucide-react": "latest",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "@clerk/nextjs": "^6.36.0",
+    "@prisma/client": "^6.18.0",
+    "@vercel/analytics": "^1.6.1",
+    "@vercel/blob": "^2.1.0",
+    "html2canvas": "1.4.1",
+    "jspdf": "4.2.1",
+    "lucide-react": "1.21.0",
+    "next": "16.2.9",
+    "papaparse": "^5.5.3",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
-    "eslint": "latest",
-    "eslint-config-next": "latest"
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.9",
+    "prisma": "^6.18.0",
+    "vitest": "^3.2.4"
   }
 }

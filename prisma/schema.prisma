@@ -1,0 +1,263 @@
+// Yacht Uniform Lookbook - production data model
+// Multi-tenant: the Yacht is the tenant. Every operational record is yacht-scoped.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  CAPTAIN
+  CHIEF_STEW
+  MEMBER
+}
+
+enum BodyType {
+  woman
+  man
+}
+
+enum OrderStatus {
+  DRAFT
+  CAPTAIN_REVIEW
+  OWNER_APPROVAL
+  APPROVED
+}
+
+enum ImportStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum ArtifactType {
+  PDF
+  CSV
+  JSON
+}
+
+model User {
+  id          String       @id @default(cuid())
+  clerkId     String       @unique
+  email       String       @unique
+  name        String?
+  memberships Membership[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Yacht {
+  id           String          @id @default(cuid())
+  name         String
+  slug         String          @unique
+  memberships  Membership[]
+  suppliers    Supplier[]
+  products     Product[]
+  looks        Look[]
+  crew         CrewMember[]
+  settings     ProjectSettings?
+  orders       OrderProject[]
+  imports      ImportBatch[]
+  artifacts    ExportArtifact[]
+  auditEvents  AuditEvent[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model Membership {
+  id        String         @id @default(cuid())
+  userId    String
+  yachtId   String
+  role      MembershipRole @default(MEMBER)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  yacht     Yacht          @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([userId, yachtId])
+  @@index([yachtId])
+}
+
+model Supplier {
+  id        String    @id @default(cuid())
+  yachtId   String
+  name      String
+  contact   String?
+  notes     String?
+  yacht     Yacht     @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([yachtId, name])
+  @@index([yachtId])
+}
+
+model Product {
+  id              String      @id @default(cuid())
+  yachtId         String
+  supplierId      String?
+  externalId      String?
+  category        String
+  name            String
+  brand           String?
+  sku             String?
+  price           Decimal     @default(0) @db.Decimal(10, 2)
+  currency        String      @default("EUR")
+  vatRate         Decimal     @default(0) @db.Decimal(5, 2)
+  colours         String[]    @default([])
+  swatch          String      @default("#ffffff")
+  accent          String      @default("#0b1f3a")
+  fabric          String?
+  details         String?
+  fit             String[]    @default([])
+  roleTags        String[]    @default([])
+  leadTime        String?
+  minOrder        Int         @default(1)
+  sizeRange       String?
+  imageHint       String      @default("polo")
+  imageUrl        String?
+  active          Boolean     @default(true)
+  sortIndex       Int         @default(0)
+  yacht           Yacht       @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  supplier        Supplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  lookItems       LookItem[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([yachtId, sku])
+  @@index([yachtId, category])
+  @@index([yachtId, active])
+}
+
+model Look {
+  id          String     @id @default(cuid())
+  yachtId     String
+  name        String
+  description String?
+  bodyType    BodyType   @default(woman)
+  sortIndex   Int        @default(0)
+  yacht       Yacht      @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  items       LookItem[]
+  crew        CrewMember[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([yachtId])
+}
+
+model LookItem {
+  id        String  @id @default(cuid())
+  lookId    String
+  productId String
+  look      Look    @relation(fields: [lookId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([lookId, productId])
+  @@index([productId])
+}
+
+model CrewMember {
+  id             String   @id @default(cuid())
+  yachtId        String
+  name           String
+  role           String
+  bodyType       BodyType @default(woman)
+  topSize        String?
+  bottomSize     String?
+  shoeSize       String?
+  assignedLookId String?
+  sortIndex      Int      @default(0)
+  yacht          Yacht    @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  assignedLook   Look?    @relation(fields: [assignedLookId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([yachtId])
+}
+
+model ProjectSettings {
+  id              String   @id @default(cuid())
+  yachtId         String   @unique
+  vessel          String?
+  priceNote       String   @default("")
+  currency        String   @default("EUR")
+  logoCost        Decimal  @default(15) @db.Decimal(10, 2)
+  sparePercent    Decimal  @default(10) @db.Decimal(5, 2)
+  setsPerCrew     Int      @default(2)
+  shippingFlat    Decimal  @default(0) @db.Decimal(10, 2)
+  embroiderySetup Decimal  @default(0) @db.Decimal(10, 2)
+  yacht           Yacht    @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OrderProject {
+  id           String           @id @default(cuid())
+  yachtId      String
+  name         String
+  status       OrderStatus      @default(DRAFT)
+  totals       Json?
+  snapshot     Json?
+  notes        String?
+  createdById  String?
+  approvedById String?
+  approvedAt   DateTime?
+  yacht        Yacht            @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  artifacts    ExportArtifact[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([yachtId, status])
+}
+
+model ImportBatch {
+  id           String       @id @default(cuid())
+  yachtId      String
+  filename     String
+  status       ImportStatus @default(PENDING)
+  createdCount Int          @default(0)
+  updatedCount Int          @default(0)
+  skippedCount Int          @default(0)
+  errors       Json?
+  createdById  String?
+  yacht        Yacht        @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([yachtId])
+}
+
+model ExportArtifact {
+  id             String        @id @default(cuid())
+  yachtId        String
+  orderProjectId String?
+  type           ArtifactType
+  blobUrl        String
+  createdById    String?
+  yacht          Yacht         @relation(fields: [yachtId], references: [id], onDelete: Cascade)
+  orderProject   OrderProject? @relation(fields: [orderProjectId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+
+  @@index([yachtId])
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  yachtId   String?
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  yacht     Yacht?   @relation(fields: [yachtId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([yachtId])
+  @@index([createdAt])
+}
