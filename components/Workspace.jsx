@@ -28,8 +28,17 @@ import { CatalogImport } from './CatalogImport';
 import { CrewImport } from './CrewImport';
 import { TeamPanel } from './TeamPanel';
 import { ProductAttribution } from './ProductAttribution';
+import { LookItemControls } from './LookItemControls';
 import { mergeCatalogWithDefaults, ensureFullBundledCatalog } from '../lib/catalogAttribution';
+import { productMatchesSearch, searchPlatform } from '../lib/catalogSearch';
 import { defaultProductColour, parseColourImages, withProductColour } from '../lib/productColour';
+import {
+  countEligibleCrew,
+  itemBaseQty,
+  itemOrderQty,
+  mergeRoleOptions,
+  normalizeLookItems,
+} from '../lib/lookAllocation';
 import {
   money, buildLookTotals, computeBudget, buildOrderSummary, buildSizeAwareOrderSummary,
   indexById, compareLooks,
@@ -72,6 +81,7 @@ const DEFAULT_SETTINGS = {
   budgetCap: 0,
   neededByDate: '',
   sizeSystem: 'EU',
+  customRoles: [],
 };
 
 const DEFAULT_ADVANCED_FILTERS = {
@@ -180,9 +190,14 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const [activeLookId, setActiveLookId] = useState((initialData?.looks?.[0] || defaultLooks[0]).id);
   const [activeNavCat, setActiveNavCat] = useState(ALL_SUPPLIERS_NAV_ID);
   const [expandedNavCat, setExpandedNavCat] = useState(ALL_SUPPLIERS_NAV_ID);
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState(
+    () => new Set(importedSupplierCatalog.filter((s) => s.count > 0).map((s) => s.id)),
+  );
   const [uniformNavOpen, setUniformNavOpen] = useState(true);
   const [subFilter, setSubFilter] = useState('All');
   const [search, setSearch] = useState('');
+  const [platformQuery, setPlatformQuery] = useState('');
+  const [platformSearchOpen, setPlatformSearchOpen] = useState(false);
   const [sortBy, setSortBy] = useState('newest');
   const [catalogView, setCatalogView] = useState('grid');
   const [catalogLimit, setCatalogLimit] = useState(CATALOG_PAGE_SIZE);
@@ -213,6 +228,8 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const pdfRef = useRef(null);
   const saveTimer = useRef(null);
   const sparseCatalogSynced = useRef(false);
+  const platformSearchRef = useRef(null);
+  const platformSearchWrapRef = useRef(null);
 
   function toggleUniformNav() {
     if (uniformNavOpen) setExpandedNavCat(null);
@@ -228,6 +245,20 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     setExpandedNavCat(catId);
     setSubFilter('All');
   }
+
+  function toggleSupplierFilter(supplierId) {
+    setSelectedSupplierIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(supplierId)) next.delete(supplierId);
+      else next.add(supplierId);
+      return next;
+    });
+  }
+
+  const bundledSuppliers = useMemo(
+    () => importedSupplierCatalog.filter((s) => s.count > 0).sort((a, b) => a.name.localeCompare(b.name)),
+    [],
+  );
 
   useEffect(() => {
     if (mode !== 'local') return;
@@ -304,6 +335,56 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
 
   function patchSettings(patch) { setSettings((s) => ({ ...s, ...patch })); }
 
+  function selectPlatformResult(result) {
+    setPlatformSearchOpen(false);
+    setPlatformQuery('');
+    if (result.type === 'product') {
+      setActiveNavCat(ALL_SUPPLIERS_NAV_ID);
+      setExpandedNavCat(ALL_SUPPLIERS_NAV_ID);
+      setSubFilter('All');
+      setSearch(result.label);
+      requestAnimationFrame(() => {
+        document.querySelector('.catalog-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+      return;
+    }
+    if (result.type === 'look') {
+      setActiveLookId(result.id);
+      setMobileNavOpen(false);
+      return;
+    }
+    if (result.type === 'crew') {
+      setRightPanelOpen(true);
+      return;
+    }
+    if (result.type === 'order') {
+      setShowApprovals(true);
+    }
+  }
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        platformSearchRef.current?.focus();
+        setPlatformSearchOpen(true);
+      }
+      if (e.key === 'Escape') setPlatformSearchOpen(false);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    function onPointerDown(e) {
+      if (!platformSearchWrapRef.current?.contains(e.target)) {
+        setPlatformSearchOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, []);
+
   const activeLook = looks.find((l) => l.id === activeLookId) || looks[0];
   const activeNav = navCategories.find((n) => n.id === activeNavCat) || navCategories[0];
   const productsById = useMemo(() => indexById(products), [products]);
@@ -317,24 +398,59 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     [colourChoices],
   );
 
-  const selectedProducts = useMemo(
-    () => (activeLook?.productIds || [])
-      .map((id) => productsById[id])
-      .filter((p) => p && productMatchesBodyType(p, activeLook?.bodyType || 'woman'))
-      .map((p) => withProductColour(p, colourForProduct(p))),
-    [productsById, activeLook, colourForProduct],
+  const selectedProducts = useMemo(() => {
+    const normalized = normalizeLookItems(activeLook || {}, productsById);
+    const itemByProduct = new Map((normalized.items || []).map((item) => [item.productId, item]));
+    return (normalized.productIds || [])
+      .map((id) => {
+        const product = productsById[id];
+        if (!product || !productMatchesBodyType(product, activeLook?.bodyType || 'woman')) return null;
+        return {
+          product: withProductColour(product, colourForProduct(product)),
+          allocation: itemByProduct.get(id) || {
+            productId: id,
+            unitsPerPerson: 1,
+            roleIds: [],
+            spareQty: 0,
+          },
+        };
+      })
+      .filter(Boolean);
+  }, [productsById, activeLook, colourForProduct]);
+
+  const roleOptions = useMemo(
+    () => mergeRoleOptions(roles, settings.customRoles || []),
+    [settings.customRoles],
   );
+  const customRoleIds = useMemo(
+    () => new Set((settings.customRoles || []).map((role) => role.id)),
+    [settings.customRoles],
+  );
+  const activeLookNormalized = useMemo(
+    () => normalizeLookItems(activeLook || {}, productsById),
+    [activeLook, productsById],
+  );
+
+  const searchActive = search.trim().length > 0;
 
   const filteredProducts = useMemo(() => {
     const isAllSuppliers = activeNavCat === ALL_SUPPLIERS_NAV_ID;
     let base = products.filter((p) => {
       if (p.active === false) return false;
-      if (isAllSuppliers) return !!p.supplierCatalogId;
+      if (searchActive) {
+        if (!productMatchesSearch(p, search)) return false;
+        if (!productMatchesRole(p, advancedFilters.role || roleFilter)) return false;
+        return true;
+      }
+      if (isAllSuppliers) {
+        if (!p.supplierCatalogId) return false;
+        if (selectedSupplierIds.size > 0 && !selectedSupplierIds.has(p.supplierCatalogId)) return false;
+        return true;
+      }
       if (!productMatchesNav(p, activeNav)) return false;
       if (!productMatchesBodyType(p, activeLook?.bodyType || 'woman')) return false;
       if (!productMatchesSubFilter(p, subFilter, activeNav.id)) return false;
       if (!productMatchesRole(p, advancedFilters.role || roleFilter)) return false;
-      if (search && !`${p.name} ${p.brand} ${p.supplierName || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
 
@@ -359,12 +475,18 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     if (sortBy === 'price-desc') return [...base].sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
     if (sortBy === 'lead') return [...base].sort((a, b) => (parseLeadDays(a.leadTime) || 999) - (parseLeadDays(b.leadTime) || 999));
     return base;
-  }, [products, activeNavCat, activeNav, activeLook, subFilter, search, sortBy, advancedFilters, roleFilter]);
+  }, [products, activeNavCat, activeNav, activeLook, subFilter, search, searchActive, sortBy, advancedFilters, roleFilter, selectedSupplierIds]);
+
+  const platformResults = useMemo(
+    () => searchPlatform({ products, looks, crew, orderHistory, query: platformQuery }),
+    [products, looks, crew, orderHistory, platformQuery],
+  );
 
   // Reset pagination back to the first page whenever the active filters change.
   // Done during render (not in an effect) so the limit is correct in the same pass.
   const catalogFilterSig = JSON.stringify([
     activeNavCat, subFilter, search, sortBy, advancedFilters, roleFilter, activeLook?.bodyType,
+    [...selectedSupplierIds].sort(),
   ]);
   if (catalogFilterSig !== prevCatalogFilterSig) {
     setPrevCatalogFilterSig(catalogFilterSig);
@@ -395,6 +517,35 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
 
   function patchActiveLook(patch) { setLooks(looks.map((l) => (l.id === activeLook.id ? { ...l, ...patch } : l))); }
 
+  function patchLookItem(productId, patch) {
+    setLooks(looks.map((look) => {
+      if (look.id !== activeLook.id) return look;
+      const normalized = normalizeLookItems(look, productsById);
+      const items = (normalized.items || []).map((item) => (
+        item.productId === productId ? { ...item, ...patch } : item
+      ));
+      return { ...look, productIds: normalized.productIds, items };
+    }));
+  }
+
+  function addCustomRole(role) {
+    if (!role?.id) return;
+    const existing = [...roles, ...(settings.customRoles || [])].some((entry) => entry.id === role.id);
+    if (existing) return;
+    patchSettings({ customRoles: [...(settings.customRoles || []), role] });
+  }
+
+  function removeCustomRole(roleId) {
+    patchSettings({ customRoles: (settings.customRoles || []).filter((role) => role.id !== roleId) });
+    setLooks(looks.map((look) => ({
+      ...look,
+      items: (look.items || []).map((item) => ({
+        ...item,
+        roleIds: (item.roleIds || []).filter((id) => id !== roleId),
+      })),
+    })));
+  }
+
   function toggleProduct(product) {
     const exclusive = ['tops', 'shirts', 'bottoms', 'dresses', 'outerwear', 'shoes', 'chef-wear', 'engineering', 'spa-wear', 'epaulettes'];
     let nextIds = activeLook.productIds || [];
@@ -410,7 +561,8 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
         : nextIds;
       nextIds = [...nextIds, product.id];
     }
-    patchActiveLook({ productIds: nextIds });
+    const updated = normalizeLookItems({ ...activeLook, productIds: nextIds }, productsById);
+    patchActiveLook({ productIds: updated.productIds, items: updated.items });
   }
 
   function toggleCompareLook(id) {
@@ -456,12 +608,23 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   function deleteProduct() {
     if (!editProduct.id) return;
     setProducts(products.filter((p) => p.id !== editProduct.id));
-    setLooks(looks.map((l) => ({ ...l, productIds: l.productIds.filter((id) => id !== editProduct.id) })));
+    setLooks(looks.map((l) => ({
+      ...l,
+      productIds: (l.productIds || []).filter((id) => id !== editProduct.id),
+      items: (l.items || []).filter((item) => item.productId !== editProduct.id),
+    })));
     setShowAdmin(false);
   }
 
   function addLook() {
-    const newLook = { id: uid('look'), name: 'New Look', description: 'Describe when this look is used.', bodyType: activeLook.bodyType, productIds: [] };
+    const newLook = {
+      id: uid('look'),
+      name: 'New Look',
+      description: 'Describe when this look is used.',
+      bodyType: activeLook.bodyType,
+      productIds: [],
+      items: [],
+    };
     setLooks([...looks, newLook]); setActiveLookId(newLook.id);
   }
 
@@ -620,6 +783,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     setActiveNavCat(ALL_SUPPLIERS_NAV_ID);
     setExpandedNavCat(ALL_SUPPLIERS_NAV_ID);
     setSubFilter('All');
+    setSelectedSupplierIds(new Set(importedSupplierCatalog.filter((s) => s.count > 0).map((s) => s.id)));
     setOrder(null);
     setApprovalLog([]);
     try {
@@ -657,6 +821,57 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             <span className="topbar-title">Yacht Uniform Lookbook</span>
             <span className="topbar-tagline">Crew uniform planning</span>
           </div>
+        </div>
+        <div className="topbar-search" ref={platformSearchWrapRef}>
+          <Search size={14} className="topbar-search-icon" aria-hidden="true" />
+          <input
+            ref={platformSearchRef}
+            className="topbar-search-input"
+            type="search"
+            placeholder="Search products, looks, crew…"
+            value={platformQuery}
+            onChange={(e) => {
+              setPlatformQuery(e.target.value);
+              setPlatformSearchOpen(true);
+            }}
+            onFocus={() => setPlatformSearchOpen(true)}
+            aria-label="Search platform"
+            aria-expanded={platformSearchOpen && platformResults.total > 0}
+            aria-controls="platform-search-results"
+          />
+          <kbd className="topbar-search-kbd" aria-hidden="true">⌘K</kbd>
+          {platformSearchOpen && platformQuery.trim() && (
+            <div className="platform-search-dropdown" id="platform-search-results" role="listbox">
+              {platformResults.total === 0 ? (
+                <p className="platform-search-empty">No matches for &ldquo;{platformQuery.trim()}&rdquo;</p>
+              ) : (
+                <>
+                  {[
+                    { key: 'products', label: 'Products', items: platformResults.products },
+                    { key: 'looks', label: 'Looks', items: platformResults.looks },
+                    { key: 'crew', label: 'Crew', items: platformResults.crew },
+                    { key: 'orders', label: 'Orders', items: platformResults.orders },
+                  ].map(({ key, label, items }) => items.length > 0 && (
+                    <div key={key} className="platform-search-group">
+                      <div className="platform-search-group-label">{label}</div>
+                      {items.map((item) => (
+                        <button
+                          key={`${item.type}-${item.id}`}
+                          type="button"
+                          className="platform-search-item"
+                          role="option"
+                          onClick={() => selectPlatformResult(item)}
+                        >
+                          <span className="platform-search-item-label">{item.label}</span>
+                          {item.meta && <span className="platform-search-item-meta">{item.meta}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
         </div>
         <div className="topbar-actions">
           {mode === 'server' && authInfo?.yachts?.length > 0 && (
@@ -838,7 +1053,8 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               const prev = navCategories[i - 1];
               const showLabel = nc.section && nc.section !== prev?.section;
               const isExpanded = expandedNavCat === nc.id;
-              const hasSubcats = nc.subFilters.length > 1;
+              const isSupplierNav = nc.id === ALL_SUPPLIERS_NAV_ID;
+              const hasSubcats = nc.subFilters.length > 1 || isSupplierNav;
               return (
                 <div key={nc.id}>
                   {showLabel && (
@@ -853,7 +1069,26 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                       <ChevronDown size={12} className={`nav-cat-chevron ${isExpanded ? 'open' : ''}`} aria-hidden />
                     )}
                   </button>
-                  {isExpanded && hasSubcats && (
+                  {isExpanded && isSupplierNav && (
+                    <div className="nav-supplier-list" role="group" aria-label="Filter by supplier">
+                      {bundledSuppliers.map((supplier) => {
+                        const checked = selectedSupplierIds.has(supplier.id);
+                        return (
+                          <label key={supplier.id} className={`nav-supplier-item ${checked ? 'checked' : ''}`}>
+                            <input
+                              type="checkbox"
+                              className="nav-supplier-checkbox"
+                              checked={checked}
+                              onChange={() => toggleSupplierFilter(supplier.id)}
+                            />
+                            <span className="nav-supplier-name">{supplier.name}</span>
+                            <span className="nav-supplier-count">{supplier.count.toLocaleString()}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {isExpanded && !isSupplierNav && nc.subFilters.length > 1 && (
                     <div className="nav-subcat-list" role="group" aria-label={`${nc.label} categories`}>
                       {nc.subFilters.map((sub) => (
                         <button
@@ -958,7 +1193,14 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                 <div className="catalog-search-row">
                   <div style={{ position: 'relative', flex: 1 }}>
                     <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input className="search-input" style={{ paddingLeft: 32 }} placeholder="Search products…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search products" />
+                    <input
+                      className="search-input"
+                      style={{ paddingLeft: 32 }}
+                      placeholder={searchActive ? 'Searching all suppliers…' : 'Search products…'}
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      aria-label="Search products"
+                    />
                   </div>
                   <button type="button" className={`filter-btn ${showAdvancedFilters ? 'active' : ''}`} onClick={() => setShowAdvancedFilters((s) => !s)}>
                     <SlidersHorizontal size={14} /> Filter
@@ -1043,7 +1285,12 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                 <div className="budget-row"><label>Crew Members</label><span style={{ fontWeight: 800 }}>{crew.length}</span></div>
                 <div className="budget-row"><label>Default sets per crew</label><input className="budget-input" type="number" min="1" value={settings.setsPerCrew} onChange={(e) => patchSettings({ setsPerCrew: Number(e.target.value) })} /></div>
                 <div className="budget-row"><label>Logo / Embroidery per item</label><input className="budget-input" type="number" value={settings.logoCost} onChange={(e) => patchSettings({ logoCost: Number(e.target.value) })} /></div>
-                <div className="budget-row"><label>Spare Stock Allowance %</label><input className="budget-input" type="number" value={settings.sparePercent} onChange={(e) => patchSettings({ sparePercent: Number(e.target.value) })} /></div>
+                {!budget.usesItemAllocations && (
+                  <div className="budget-row"><label>Spare Stock Allowance %</label><input className="budget-input" type="number" value={settings.sparePercent} onChange={(e) => patchSettings({ sparePercent: Number(e.target.value) })} /></div>
+                )}
+                {budget.usesItemAllocations && (
+                  <p className="budget-hint">Spare units are set per item in the current look strip below.</p>
+                )}
                 {settings.budgetCap > 0 && budget.overBudget && (
                   <div className="warning-item error" style={{ marginBottom: 8 }}>Over budget cap by {fmt(budget.budgetDelta)}</div>
                 )}
@@ -1051,7 +1298,14 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                 <div className="budget-results">
                   <div className="budget-row"><label>Items Total</label><strong>{fmt(budget.itemsTotal)}</strong></div>
                   <div className="budget-row"><label>Logo / Embroidery Total</label><strong>{fmt(budget.logoTotal)}</strong></div>
-                  <div className="budget-row"><label>Spare Stock ({settings.sparePercent}%)</label><strong>{fmt(budget.spareTotal)}</strong></div>
+                  <div className="budget-row">
+                    <label>
+                      {budget.usesItemAllocations
+                        ? `Spare Stock (${budget.spareUnitCount || 0} units)`
+                        : `Spare Stock (${settings.sparePercent}%)`}
+                    </label>
+                    <strong>{fmt(budget.spareTotal)}</strong>
+                  </div>
                   <div className="budget-row"><label>VAT</label><strong>{fmt(budget.vatTotal)}</strong></div>
                   <div className="budget-row"><label>Shipping</label><strong>{fmt(budget.shippingTotal)}</strong></div>
                   <div className="budget-row"><label>Setup</label><strong>{fmt(budget.setupTotal)}</strong></div>
@@ -1066,18 +1320,37 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
             <div className="bottom-panel">
               <h4>Current Look: {activeLook.name}</h4>
               <div className="current-look-scroll">
-                {selectedProducts.map((p) => (
-                  <div key={p.id} className="current-item">
-                    <div className="current-item-img">
-                      <LookVisual bodyType={activeLook.bodyType} products={[p]} variant="item" />
+                {selectedProducts.map(({ product, allocation }) => {
+                  const baseQty = itemBaseQty(crew, activeLookNormalized, allocation, settings);
+                  const orderQty = itemOrderQty(crew, activeLookNormalized, allocation, settings);
+                  const lineTotal = orderQty * num(product.price);
+                  return (
+                    <div key={product.id} className="current-item">
+                      <div className="current-item-img">
+                        <LookVisual bodyType={activeLook.bodyType} products={[product]} variant="item" />
+                      </div>
+                      <div className="current-item-info">
+                        <div className="name">{product.name.split(' ').slice(0, 2).join(' ')}</div>
+                        <ProductAttribution product={product} compact />
+                        <div className="price">{fmt(product.price)} each</div>
+                        <LookItemControls
+                          item={allocation}
+                          roleOptions={roleOptions}
+                          customRoleIds={customRoleIds}
+                          eligibleCount={countEligibleCrew(crew, activeLookNormalized, allocation)}
+                          baseQty={baseQty}
+                          orderQty={orderQty}
+                          lineTotal={lineTotal}
+                          fmt={fmt}
+                          disabled={!canEdit}
+                          onChange={(patch) => patchLookItem(product.id, patch)}
+                          onAddRole={addCustomRole}
+                          onRemoveRole={removeCustomRole}
+                        />
+                      </div>
                     </div>
-                    <div className="current-item-info">
-                      <div className="name">{p.name.split(' ').slice(0, 2).join(' ')}</div>
-                      <ProductAttribution product={p} compact />
-                      <div className="price">{fmt(p.price)}</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -1179,7 +1452,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
         <h3>Budget summary</h3>
         <table className="summary-table"><tbody>
           <tr><td>Base uniform total</td><td>{fmt(budget.baseTotal)}</td></tr>
-          <tr><td>Spare stock allowance ({settings.sparePercent}%)</td><td>{fmt(budget.spareTotal)}</td></tr>
+          <tr><td>Spare stock{budget.usesItemAllocations ? ` (${budget.spareUnitCount || 0} units)` : ` allowance (${settings.sparePercent}%)`}</td><td>{fmt(budget.spareTotal)}</td></tr>
           <tr><td>VAT</td><td>{fmt(budget.vatTotal)}</td></tr>
           <tr><td>Shipping + setup</td><td>{fmt(budget.shippingTotal + budget.setupTotal)}</td></tr>
           <tr><th>Estimated grand total</th><th>{fmt(budget.grandTotal)}</th></tr>
