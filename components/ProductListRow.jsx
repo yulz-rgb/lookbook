@@ -2,10 +2,28 @@
 
 import { Plus, Trash2 } from 'lucide-react';
 import { money } from '../lib/calc';
+import { LookItemControls } from './LookItemControls';
 import { ProductAttribution } from './ProductAttribution';
 import { ProductPhoto } from './ProductPhoto';
 
-export function ProductListRow({ product, isSelected, onToggle, onEdit, roleMatch, readOnly = false }) {
+export function ProductListRow({
+  product,
+  isSelected,
+  onToggle,
+  onEdit,
+  roleMatch,
+  readOnly = false,
+  allocation = null,
+  roleOptions = [],
+  customRoleIds = new Set(),
+  eligibleCount = 0,
+  baseQty = 0,
+  orderQty = 0,
+  disabled = false,
+  onAllocationChange,
+  onAddRole,
+  onRemoveRole,
+}) {
   return (
     <article className={`product-list-row ${isSelected ? 'selected' : ''} ${roleMatch === false ? 'role-mismatch' : ''}`}>
       <div className="plr-thumb" style={{ background: product.swatch || '#eef4f9' }}>
@@ -24,6 +42,21 @@ export function ProductListRow({ product, isSelected, onToggle, onEdit, roleMatc
           <span>MOQ: {product.minOrder || 1}</span>
           {roleMatch === false && <span className="plr-warn">Role mismatch</span>}
         </div>
+        {isSelected && allocation && onAllocationChange && (
+          <LookItemControls
+            item={allocation}
+            roleOptions={roleOptions}
+            customRoleIds={customRoleIds}
+            eligibleCount={eligibleCount}
+            baseQty={baseQty}
+            orderQty={orderQty}
+            compact
+            disabled={disabled}
+            onChange={onAllocationChange}
+            onAddRole={onAddRole}
+            onRemoveRole={onRemoveRole}
+          />
+        )}
       </div>
       <div className="plr-price">{money(product.price, product.currency)}</div>
       {readOnly ? (

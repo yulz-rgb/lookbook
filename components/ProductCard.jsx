@@ -7,6 +7,7 @@ import {
   productImageForColour,
   productSwatchForColour,
 } from '../lib/productColour';
+import { LookItemControls } from './LookItemControls';
 import { ProductAttribution } from './ProductAttribution';
 import { ProductPhoto } from './ProductPhoto';
 
@@ -18,6 +19,16 @@ export function ProductCard({
   readOnly = false,
   selectedColour,
   onColourSelect,
+  allocation = null,
+  roleOptions = [],
+  customRoleIds = new Set(),
+  eligibleCount = 0,
+  baseQty = 0,
+  orderQty = 0,
+  disabled = false,
+  onAllocationChange,
+  onAddRole,
+  onRemoveRole,
 }) {
   const activeColour = selectedColour || defaultProductColour(product);
   const displayImage = productImageForColour(product, activeColour);
@@ -63,6 +74,21 @@ export function ProductCard({
             </button>
           ))}
         </div>
+        {isSelected && allocation && onAllocationChange && (
+          <LookItemControls
+            item={allocation}
+            roleOptions={roleOptions}
+            customRoleIds={customRoleIds}
+            eligibleCount={eligibleCount}
+            baseQty={baseQty}
+            orderQty={orderQty}
+            compact
+            disabled={disabled}
+            onChange={onAllocationChange}
+            onAddRole={onAddRole}
+            onRemoveRole={onRemoveRole}
+          />
+        )}
         {readOnly ? (
           <div className="card-actions">
             <span className={`card-status ${isSelected ? 'in' : ''}`}>{isSelected ? '✓ In this look' : 'Not in look'}</span>

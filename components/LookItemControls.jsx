@@ -43,6 +43,7 @@ export function LookItemControls({
   lineTotal = 0,
   fmt,
   disabled = false,
+  compact = false,
   onChange,
   onAddRole,
   onRemoveRole,
@@ -83,7 +84,7 @@ export function LookItemControls({
   }
 
   return (
-    <div className="look-item-controls" onClick={(e) => e.stopPropagation()}>
+    <div className={`look-item-controls ${compact ? 'compact' : ''}`} onClick={(e) => e.stopPropagation()}>
       <Stepper
         label="Per person"
         value={item.unitsPerPerson ?? 1}
@@ -160,13 +161,17 @@ export function LookItemControls({
         onChange={(spareQty) => onChange({ spareQty })}
       />
 
-      <div className="look-item-quote">
-        <span>{orderQty} units</span>
-        <strong>{fmt(lineTotal)}</strong>
-      </div>
-      <div className="look-item-quote-sub">
-        Base {baseQty} + spares {item.spareQty ?? 0}
-      </div>
+      {!compact && fmt && (
+        <>
+          <div className="look-item-quote">
+            <span>{orderQty} units</span>
+            <strong>{fmt(lineTotal)}</strong>
+          </div>
+          <div className="look-item-quote-sub">
+            Base {baseQty} + spares {item.spareQty ?? 0}
+          </div>
+        </>
+      )}
     </div>
   );
 }

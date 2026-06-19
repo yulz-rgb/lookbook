@@ -870,8 +870,8 @@ a:focus-visible {
   display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 272px;
   border-top: 1px solid var(--line);
   background: var(--surface-2);
-  min-height: 360px;
-  max-height: min(52vh, 520px);
+  min-height: 180px;
+  max-height: 220px;
   flex-shrink: 0;
 }
 .bottom-panel {
@@ -956,32 +956,24 @@ a:focus-visible {
 
 .budget-hint { font-size: 11px; color: var(--muted); line-height: 1.4; margin: 0 0 12px; }
 
-.budget-quote-items {
-  display: flex; flex-direction: column; gap: 12px;
-  margin-bottom: 12px; max-height: min(42vh, 420px); overflow-y: auto;
-  padding-right: 4px;
-}
-.budget-quote-title {
-  margin: 0; font-size: 10px; font-weight: 800; letter-spacing: .08em;
+.look-item-controls.compact { gap: 6px; margin: 8px 0 10px; padding-top: 8px; border-top: 1px solid var(--line-light); }
+.look-item-controls.compact .look-item-stepper-label { font-size: 8px; }
+.look-item-controls.compact .look-item-stepper-btn { width: 22px; height: 22px; }
+.look-item-controls.compact .look-item-stepper-value { font-size: 11px; }
+.look-item-controls.compact .look-item-role-trigger { padding: 5px 6px; font-size: 9px; }
+.look-item-controls.compact .look-item-role-meta { font-size: 8px; }
+
+.budget-quote-lines { margin-bottom: 8px; }
+.budget-quote-lines .budget-quote-title {
+  margin: 0 0 8px; font-size: 10px; font-weight: 800; letter-spacing: .08em;
   text-transform: uppercase; color: var(--muted);
 }
-.budget-quote-item {
-  border: 1px solid var(--line-light); border-radius: 8px;
-  padding: 10px; background: var(--surface-2);
-}
-.budget-quote-item-head {
-  display: flex; justify-content: space-between; gap: 8px; align-items: flex-start;
-  margin-bottom: 8px; font-size: 11px;
-}
-.budget-quote-item-head strong {
-  font-size: 11px; line-height: 1.35; color: var(--ink);
-}
-.budget-quote-item-head span { color: var(--navy); font-weight: 700; white-space: nowrap; }
+.budget-quote-line label { font-size: 10px; }
+.budget-quote-line strong { font-size: 11px; }
 
-.current-item-quote-compact {
-  margin-top: 6px; font-size: 10px; font-weight: 700; color: var(--navy);
-  font-variant-numeric: tabular-nums;
-}
+.product-card.selected .card-actions { margin-top: 4px; }
+.product-list-row.selected { align-items: flex-start; }
+.product-list-row .look-item-controls.compact { margin-top: 10px; max-width: 320px; }
 .add-item-slot {
   flex-shrink: 0; width: 100px; min-height: 120px;
   border: 1.5px dashed var(--line); border-radius: var(--radius-sm);

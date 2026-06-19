@@ -28,7 +28,6 @@ import { CatalogImport } from './CatalogImport';
 import { CrewImport } from './CrewImport';
 import { TeamPanel } from './TeamPanel';
 import { ProductAttribution } from './ProductAttribution';
-import { LookItemControls } from './LookItemControls';
 import { mergeCatalogWithDefaults, ensureFullBundledCatalog } from '../lib/catalogAttribution';
 import { productMatchesSearch, searchPlatform } from '../lib/catalogSearch';
 import { defaultProductColour, parseColourImages, withProductColour } from '../lib/productColour';
@@ -430,6 +429,24 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     () => normalizeLookItems(activeLook || {}, productsById),
     [activeLook, productsById],
   );
+  const allocationByProductId = useMemo(
+    () => new Map((activeLookNormalized.items || []).map((item) => [item.productId, item])),
+    [activeLookNormalized],
+  );
+
+  function productAllocationProps(productId) {
+    const allocation = allocationByProductId.get(productId);
+    if (!allocation) return null;
+    const baseQty = itemBaseQty(crew, activeLookNormalized, allocation, settings);
+    const orderQty = itemOrderQty(crew, activeLookNormalized, allocation, settings);
+    return {
+      allocation,
+      eligibleCount: countEligibleCrew(crew, activeLookNormalized, allocation),
+      baseQty,
+      orderQty,
+      onAllocationChange: (patch) => patchLookItem(productId, patch),
+    };
+  }
 
   const searchActive = search.trim().length > 0;
 
@@ -1130,7 +1147,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               <ModelPreview
                 key={activeLook.bodyType}
                 bodyType={activeLook.bodyType}
-                selectedProducts={selectedProducts}
+                selectedProducts={selectedProducts.map(({ product }) => product)}
               />
               <div className="preview-stats">
                 <div className="preview-stats-item">
@@ -1227,21 +1244,50 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               <div className="catalog-grid-wrap">
                 {catalogView === 'grid' ? (
                   <div className="catalog-grid">
-                    {visibleProducts.map((p) => (
-                      <ProductCard key={p.id} product={p} isSelected={activeLook.productIds.includes(p.id)}
-                        selectedColour={colourForProduct(p)}
-                        onColourSelect={selectProductColour}
-                        onToggle={toggleProduct} onEdit={openEditProduct} />
-                    ))}
+                    {visibleProducts.map((p) => {
+                      const alloc = productAllocationProps(p.id);
+                      const inLook = activeLook.productIds.includes(p.id);
+                      return (
+                        <ProductCard
+                          key={p.id}
+                          product={p}
+                          isSelected={inLook}
+                          selectedColour={colourForProduct(p)}
+                          onColourSelect={selectProductColour}
+                          onToggle={toggleProduct}
+                          onEdit={openEditProduct}
+                          roleOptions={roleOptions}
+                          customRoleIds={customRoleIds}
+                          disabled={!canEdit}
+                          onAddRole={addCustomRole}
+                          onRemoveRole={removeCustomRole}
+                          {...(inLook && alloc ? alloc : {})}
+                        />
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="product-list">
-                    {visibleProducts.map((p) => (
-                      <ProductListRow key={p.id} product={withProductColour(p, colourForProduct(p))}
-                        isSelected={activeLook.productIds.includes(p.id)}
-                        roleMatch={productMatchesRole(p, roleFilter)}
-                        onToggle={toggleProduct} onEdit={openEditProduct} />
-                    ))}
+                    {visibleProducts.map((p) => {
+                      const alloc = productAllocationProps(p.id);
+                      const inLook = activeLook.productIds.includes(p.id);
+                      return (
+                        <ProductListRow
+                          key={p.id}
+                          product={withProductColour(p, colourForProduct(p))}
+                          isSelected={inLook}
+                          roleMatch={productMatchesRole(p, roleFilter)}
+                          onToggle={toggleProduct}
+                          onEdit={openEditProduct}
+                          roleOptions={roleOptions}
+                          customRoleIds={customRoleIds}
+                          disabled={!canEdit}
+                          onAddRole={addCustomRole}
+                          onRemoveRole={removeCustomRole}
+                          {...(inLook && alloc ? alloc : {})}
+                        />
+                      );
+                    })}
                   </div>
                 )}
                 {hasMoreCatalog && (
@@ -1289,44 +1335,28 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                   <div className="budget-row"><label>Spare Stock Allowance %</label><input className="budget-input" type="number" value={settings.sparePercent} onChange={(e) => patchSettings({ sparePercent: Number(e.target.value) })} /></div>
                 )}
                 {budget.usesItemAllocations && (
-                  <p className="budget-hint">Set units, roles, and spares for each item below — totals update instantly.</p>
+                  <p className="budget-hint">Add items to the look, then set units and roles on each card — totals update here.</p>
                 )}
                 {settings.budgetCap > 0 && budget.overBudget && (
                   <div className="warning-item error" style={{ marginBottom: 8 }}>Over budget cap by {fmt(budget.budgetDelta)}</div>
                 )}
-                {selectedProducts.length > 0 && (
-                  <div className="budget-quote-items">
-                    <h4 className="budget-quote-title">Issuance — {activeLook.name}</h4>
+                <div className="budget-divider" />
+                {budget.usesItemAllocations && selectedProducts.length > 0 && (
+                  <div className="budget-quote-lines">
+                    <h4 className="budget-quote-title">Quote lines</h4>
                     {selectedProducts.map(({ product, allocation }) => {
-                      const baseQty = itemBaseQty(crew, activeLookNormalized, allocation, settings);
                       const orderQty = itemOrderQty(crew, activeLookNormalized, allocation, settings);
                       const lineTotal = orderQty * num(product.price);
                       return (
-                        <div key={product.id} className="budget-quote-item">
-                          <div className="budget-quote-item-head">
-                            <strong>{product.name.split(' ').slice(0, 3).join(' ')}</strong>
-                            <span>{fmt(product.price)}</span>
-                          </div>
-                          <LookItemControls
-                            item={allocation}
-                            roleOptions={roleOptions}
-                            customRoleIds={customRoleIds}
-                            eligibleCount={countEligibleCrew(crew, activeLookNormalized, allocation)}
-                            baseQty={baseQty}
-                            orderQty={orderQty}
-                            lineTotal={lineTotal}
-                            fmt={fmt}
-                            disabled={!canEdit}
-                            onChange={(patch) => patchLookItem(product.id, patch)}
-                            onAddRole={addCustomRole}
-                            onRemoveRole={removeCustomRole}
-                          />
+                        <div key={product.id} className="budget-row budget-quote-line">
+                          <label>{product.name.split(' ').slice(0, 3).join(' ')}</label>
+                          <strong>{orderQty} · {fmt(lineTotal)}</strong>
                         </div>
                       );
                     })}
                   </div>
                 )}
-                <div className="budget-divider" />
+                {budget.usesItemAllocations && selectedProducts.length > 0 && <div className="budget-divider" />}
                 <div className="budget-results">
                   <div className="budget-row"><label>Items Total</label><strong>{fmt(budget.itemsTotal)}</strong></div>
                   <div className="budget-row"><label>Logo / Embroidery Total</label><strong>{fmt(budget.logoTotal)}</strong></div>
@@ -1353,7 +1383,6 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
               <h4>Current Look: {activeLook.name}</h4>
               <div className="current-look-scroll">
                 {selectedProducts.map(({ product, allocation }) => {
-                  const baseQty = itemBaseQty(crew, activeLookNormalized, allocation, settings);
                   const orderQty = itemOrderQty(crew, activeLookNormalized, allocation, settings);
                   const lineTotal = orderQty * num(product.price);
                   return (
@@ -1364,10 +1393,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                       <div className="current-item-info">
                         <div className="name">{product.name.split(' ').slice(0, 2).join(' ')}</div>
                         <ProductAttribution product={product} compact />
-                        <div className="price">{fmt(product.price)} each</div>
-                        <div className="current-item-quote-compact">
-                          {orderQty} units · {fmt(lineTotal)}
-                        </div>
+                        <div className="price">{orderQty} · {fmt(lineTotal)}</div>
                       </div>
                     </div>
                   );
