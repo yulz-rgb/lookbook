@@ -129,10 +129,13 @@ async function main() {
 
   const started = Date.now();
   const { records, method, skipped, notes } = await fetchSupplierCatalog(supplier);
-  const catalogProducts = records.map((p) => normalizeUniformProduct({
-    ...p,
-    supplierName: p.supplierName || supplier.name,
-  }));
+  const excludeUrls = new Set(supplier.excludeProductUrls || []);
+  const catalogProducts = records
+    .filter((p) => !excludeUrls.has(p.productUrl))
+    .map((p) => normalizeUniformProduct({
+      ...p,
+      supplierName: p.supplierName || supplier.name,
+    }));
 
   const issues = validateUniformCatalog(catalogProducts);
   if (issues.length) {
