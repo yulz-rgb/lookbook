@@ -56,7 +56,7 @@ const NAV_ICONS = {
 };
 const LOCAL_KEY = 'yachtUniform.workspace.v5';
 const CATALOG_VERSION_KEY = 'yachtUniform.catalogVersion';
-const CATALOG_VERSION = 'all-suppliers-v6';
+const CATALOG_VERSION = 'all-suppliers-v7';
 const ORDER_HISTORY_KEY = 'yachtUniform.orders.v1';
 const CATALOG_PAGE_SIZE = 96;
 
