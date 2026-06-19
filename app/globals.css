@@ -20,7 +20,7 @@
   --danger: #be123c;
   --danger-pale: #fff1f2;
   --sidebar-w: 240px;
-  --right-w: 320px;
+  --right-w: 360px;
   --topbar-h: 60px;
   --space-xs: 4px;
   --space-sm: 8px;
@@ -867,28 +867,36 @@ a:focus-visible {
 
 /* ── Bottom zone ── */
 .bottom-zone {
-  display: grid; grid-template-columns: 1fr 1fr 272px;
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 272px;
   border-top: 1px solid var(--line);
   background: var(--surface-2);
-  min-height: 180px; max-height: 220px;
+  min-height: 360px;
+  max-height: min(52vh, 520px);
+  flex-shrink: 0;
 }
 .bottom-panel {
   padding: var(--space-md) var(--space-lg);
   border-right: 1px solid var(--line);
   overflow: hidden; display: flex; flex-direction: column;
   background: var(--surface);
+  min-height: 0;
+}
+.bottom-panel.current-look-panel {
+  overflow-x: auto;
+  overflow-y: auto;
 }
 .bottom-panel:last-child { border-right: none; }
 .bottom-panel h4 {
   margin: 0 0 12px; font-size: 10px; font-weight: 800;
   letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
 }
-.current-look-scroll { display: flex; gap: 12px; overflow-x: auto; flex: 1; align-items: flex-start; padding-bottom: 6px; }
+.current-look-scroll { display: flex; gap: 12px; overflow-x: auto; overflow-y: visible; flex: 1; align-items: flex-start; padding-bottom: 8px; }
 .current-item {
-  flex-shrink: 0; width: 220px; border: 1px solid var(--line);
+  flex-shrink: 0; width: 148px; border: 1px solid var(--line);
   border-radius: var(--radius-sm); overflow: visible; background: var(--surface);
   transition: all var(--tr);
   box-shadow: var(--shadow-xs);
+  align-self: stretch;
 }
 .current-item:hover { border-color: var(--navy-light); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 .current-item-img { height: 80px; display: flex; align-items: center; justify-content: center; background: var(--surface-2); border-radius: var(--radius-sm) var(--radius-sm) 0 0; overflow: hidden; }
@@ -947,6 +955,33 @@ a:focus-visible {
 .look-item-quote-sub { font-size: 9px; color: var(--muted); }
 
 .budget-hint { font-size: 11px; color: var(--muted); line-height: 1.4; margin: 0 0 12px; }
+
+.budget-quote-items {
+  display: flex; flex-direction: column; gap: 12px;
+  margin-bottom: 12px; max-height: min(42vh, 420px); overflow-y: auto;
+  padding-right: 4px;
+}
+.budget-quote-title {
+  margin: 0; font-size: 10px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.budget-quote-item {
+  border: 1px solid var(--line-light); border-radius: 8px;
+  padding: 10px; background: var(--surface-2);
+}
+.budget-quote-item-head {
+  display: flex; justify-content: space-between; gap: 8px; align-items: flex-start;
+  margin-bottom: 8px; font-size: 11px;
+}
+.budget-quote-item-head strong {
+  font-size: 11px; line-height: 1.35; color: var(--ink);
+}
+.budget-quote-item-head span { color: var(--navy); font-weight: 700; white-space: nowrap; }
+
+.current-item-quote-compact {
+  margin-top: 6px; font-size: 10px; font-weight: 700; color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
 .add-item-slot {
   flex-shrink: 0; width: 100px; min-height: 120px;
   border: 1.5px dashed var(--line); border-radius: var(--radius-sm);

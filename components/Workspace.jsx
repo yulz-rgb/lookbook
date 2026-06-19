@@ -1289,10 +1289,42 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                   <div className="budget-row"><label>Spare Stock Allowance %</label><input className="budget-input" type="number" value={settings.sparePercent} onChange={(e) => patchSettings({ sparePercent: Number(e.target.value) })} /></div>
                 )}
                 {budget.usesItemAllocations && (
-                  <p className="budget-hint">Spare units are set per item in the current look strip below.</p>
+                  <p className="budget-hint">Set units, roles, and spares for each item below — totals update instantly.</p>
                 )}
                 {settings.budgetCap > 0 && budget.overBudget && (
                   <div className="warning-item error" style={{ marginBottom: 8 }}>Over budget cap by {fmt(budget.budgetDelta)}</div>
+                )}
+                {selectedProducts.length > 0 && (
+                  <div className="budget-quote-items">
+                    <h4 className="budget-quote-title">Issuance — {activeLook.name}</h4>
+                    {selectedProducts.map(({ product, allocation }) => {
+                      const baseQty = itemBaseQty(crew, activeLookNormalized, allocation, settings);
+                      const orderQty = itemOrderQty(crew, activeLookNormalized, allocation, settings);
+                      const lineTotal = orderQty * num(product.price);
+                      return (
+                        <div key={product.id} className="budget-quote-item">
+                          <div className="budget-quote-item-head">
+                            <strong>{product.name.split(' ').slice(0, 3).join(' ')}</strong>
+                            <span>{fmt(product.price)}</span>
+                          </div>
+                          <LookItemControls
+                            item={allocation}
+                            roleOptions={roleOptions}
+                            customRoleIds={customRoleIds}
+                            eligibleCount={countEligibleCrew(crew, activeLookNormalized, allocation)}
+                            baseQty={baseQty}
+                            orderQty={orderQty}
+                            lineTotal={lineTotal}
+                            fmt={fmt}
+                            disabled={!canEdit}
+                            onChange={(patch) => patchLookItem(product.id, patch)}
+                            onAddRole={addCustomRole}
+                            onRemoveRole={removeCustomRole}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
                 <div className="budget-divider" />
                 <div className="budget-results">
@@ -1317,7 +1349,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
           </div>
 
           <div className="bottom-zone no-print">
-            <div className="bottom-panel">
+            <div className="bottom-panel current-look-panel">
               <h4>Current Look: {activeLook.name}</h4>
               <div className="current-look-scroll">
                 {selectedProducts.map(({ product, allocation }) => {
@@ -1333,20 +1365,9 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
                         <div className="name">{product.name.split(' ').slice(0, 2).join(' ')}</div>
                         <ProductAttribution product={product} compact />
                         <div className="price">{fmt(product.price)} each</div>
-                        <LookItemControls
-                          item={allocation}
-                          roleOptions={roleOptions}
-                          customRoleIds={customRoleIds}
-                          eligibleCount={countEligibleCrew(crew, activeLookNormalized, allocation)}
-                          baseQty={baseQty}
-                          orderQty={orderQty}
-                          lineTotal={lineTotal}
-                          fmt={fmt}
-                          disabled={!canEdit}
-                          onChange={(patch) => patchLookItem(product.id, patch)}
-                          onAddRole={addCustomRole}
-                          onRemoveRole={removeCustomRole}
-                        />
+                        <div className="current-item-quote-compact">
+                          {orderQty} units · {fmt(lineTotal)}
+                        </div>
                       </div>
                     </div>
                   );
