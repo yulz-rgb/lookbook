@@ -4,18 +4,15 @@ import { useEffect, useState } from 'react';
 import { fitProductImage } from '../lib/previewImage';
 
 export function ProductPhoto({ src, alt = '', className = 'product-photo-img' }) {
-  const [displaySrc, setDisplaySrc] = useState(src || '');
+  // Only the async-fitted result lives in state, keyed by the src it was computed for.
+  // The immediate display value is derived during render to avoid setState-in-effect.
+  const [fitted, setFitted] = useState({ src: null, value: null });
 
   useEffect(() => {
+    if (!src) return undefined;
     let alive = true;
-    if (!src) {
-      setDisplaySrc('');
-      return undefined;
-    }
-
-    setDisplaySrc(src);
     fitProductImage(src).then((next) => {
-      if (alive) setDisplaySrc(next);
+      if (alive) setFitted({ src, value: next });
     });
 
     return () => {
@@ -23,6 +20,7 @@ export function ProductPhoto({ src, alt = '', className = 'product-photo-img' })
     };
   }, [src]);
 
+  const displaySrc = src ? (fitted.src === src && fitted.value ? fitted.value : src) : '';
   if (!displaySrc) return null;
 
   return (

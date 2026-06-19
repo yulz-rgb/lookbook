@@ -186,6 +186,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const [sortBy, setSortBy] = useState('newest');
   const [catalogView, setCatalogView] = useState('grid');
   const [catalogLimit, setCatalogLimit] = useState(CATALOG_PAGE_SIZE);
+  const [prevCatalogFilterSig, setPrevCatalogFilterSig] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState(DEFAULT_ADVANCED_FILTERS);
   const [roleFilter, setRoleFilter] = useState('');
@@ -265,8 +266,8 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     if (products.length >= defaultProducts.length) return;
     sparseCatalogSynced.current = true;
     const full = ensureFullBundledCatalog(products, defaultProducts);
-    setProducts(full);
     (async () => {
+      setProducts(full);
       setSaveState('saving');
       const res = await saveWorkspaceAction({ products: full, looks, crew, settings });
       setSaveState(res?.ok ? 'saved' : 'error');
@@ -356,9 +357,15 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
     return base;
   }, [products, activeNav, activeLook, subFilter, search, sortBy, advancedFilters, roleFilter]);
 
-  useEffect(() => {
+  // Reset pagination back to the first page whenever the active filters change.
+  // Done during render (not in an effect) so the limit is correct in the same pass.
+  const catalogFilterSig = JSON.stringify([
+    activeNavCat, subFilter, search, sortBy, advancedFilters, roleFilter, activeLook?.bodyType,
+  ]);
+  if (catalogFilterSig !== prevCatalogFilterSig) {
+    setPrevCatalogFilterSig(catalogFilterSig);
     setCatalogLimit(CATALOG_PAGE_SIZE);
-  }, [activeNavCat, subFilter, search, sortBy, advancedFilters, roleFilter, activeLook?.bodyType]);
+  }
 
   const visibleProducts = useMemo(
     () => filteredProducts.slice(0, catalogLimit),

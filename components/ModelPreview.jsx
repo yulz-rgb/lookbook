@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   ZoomIn,
   ZoomOut,
@@ -23,7 +23,9 @@ import {
   garmentLayers,
 } from '../lib/previewAssets';
 import {
-  loadPreviewAdjustments,
+  subscribePreviewAdjustments,
+  getPreviewAdjustmentsSnapshot,
+  getPreviewAdjustmentsServerSnapshot,
   nudgePreviewAdjustment,
   resetAllPreviewAdjustments,
   resetPreviewAdjustment,
@@ -45,23 +47,20 @@ function GarmentLayer({
 }) {
   const colour = defaultProductColour(product);
   const rawSrc = productImageForColour(product, colour);
-  const [src, setSrc] = useState(rawSrc || '');
-  const [keyed, setKeyed] = useState(false);
+  // Only the async-fitted result lives in state; the displayed src/keyed flag are
+  // derived during render so we never call setState synchronously inside the effect.
+  const [fitted, setFitted] = useState({ src: null, value: null, keyed: false });
 
   useEffect(() => {
+    if (!rawSrc) return undefined;
     let alive = true;
-    if (!rawSrc) {
-      setSrc('');
-      setKeyed(false);
-      return undefined;
-    }
-
-    setSrc(rawSrc);
-    setKeyed(false);
     fitProductImage(rawSrc).then((next) => {
       if (!alive) return;
-      setSrc(next);
-      setKeyed(Boolean(next && next !== rawSrc && next.startsWith('data:')));
+      setFitted({
+        src: rawSrc,
+        value: next,
+        keyed: Boolean(next && next !== rawSrc && next.startsWith('data:')),
+      });
     });
 
     return () => {
@@ -70,6 +69,10 @@ function GarmentLayer({
   }, [rawSrc]);
 
   if (!rawSrc) return null;
+
+  const fittedMatches = fitted.src === rawSrc;
+  const src = fittedMatches && fitted.value ? fitted.value : rawSrc;
+  const keyed = fittedMatches ? fitted.keyed : false;
 
   const scale = slot.scale || 1;
 
@@ -223,13 +226,13 @@ export function ModelPreview({ bodyType, selectedProducts = [] }) {
   const [showBackground, setShowBackground] = useState(true);
   const [fitScale, setFitScale] = useState(1);
   const [adjustMode, setAdjustMode] = useState(false);
-  const [adjustments, setAdjustments] = useState({});
+  const adjustments = useSyncExternalStore(
+    subscribePreviewAdjustments,
+    getPreviewAdjustmentsSnapshot,
+    getPreviewAdjustmentsServerSnapshot,
+  );
   const [activeLayerId, setActiveLayerId] = useState(null);
   const frameRef = useRef(null);
-
-  useEffect(() => {
-    setAdjustments(loadPreviewAdjustments());
-  }, []);
 
   const clampZoom = useCallback(
     (value) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value)),
@@ -239,15 +242,16 @@ export function ModelPreview({ bodyType, selectedProducts = [] }) {
   const figureSize = figureDimensions(bodyType, view);
   const layers = garmentLayers(bodyType, view, selectedProducts, adjustments);
 
-  useEffect(() => {
-    if (!layers.length) {
-      setActiveLayerId(null);
-      return;
-    }
-    if (!activeLayerId || !layers.some((layer) => layer.product.id === activeLayerId)) {
-      setActiveLayerId(layers[layers.length - 1].product.id);
-    }
-  }, [layers, activeLayerId]);
+  // Derive the effective selection during render instead of syncing it via an effect.
+  // `activeLayerId` is the user's explicit pick; when it is unset or no longer present
+  // in the current layers we fall back to the topmost layer.
+  const activeLayerIsValid =
+    activeLayerId != null && layers.some((layer) => layer.product.id === activeLayerId);
+  const effectiveActiveLayerId = activeLayerIsValid
+    ? activeLayerId
+    : layers.length
+      ? layers[layers.length - 1].product.id
+      : null;
 
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -279,16 +283,16 @@ export function ModelPreview({ bodyType, selectedProducts = [] }) {
   }, [adjustMode, clampZoom]);
 
   const handleNudge = useCallback((field, delta) => {
-    if (!activeLayerId) return;
-    setAdjustments(nudgePreviewAdjustment(activeLayerId, bodyType, view, field, delta));
-  }, [activeLayerId, bodyType, view]);
+    if (!effectiveActiveLayerId) return;
+    nudgePreviewAdjustment(effectiveActiveLayerId, bodyType, view, field, delta);
+  }, [effectiveActiveLayerId, bodyType, view]);
 
   const handleResetLayer = useCallback((productId) => {
-    setAdjustments(resetPreviewAdjustment(productId, bodyType, view));
+    resetPreviewAdjustment(productId, bodyType, view);
   }, [bodyType, view]);
 
   const handleResetAll = useCallback(() => {
-    setAdjustments(resetAllPreviewAdjustments());
+    resetAllPreviewAdjustments();
   }, []);
 
   const figureScale = fitScale * zoom;
@@ -348,7 +352,7 @@ export function ModelPreview({ bodyType, selectedProducts = [] }) {
       {adjustMode ? (
         <AdjustPanel
           layers={layers}
-          activeLayerId={activeLayerId}
+          activeLayerId={effectiveActiveLayerId}
           onSelectLayer={setActiveLayerId}
           onNudge={handleNudge}
           onResetLayer={handleResetLayer}
@@ -381,7 +385,7 @@ export function ModelPreview({ bodyType, selectedProducts = [] }) {
               product={product}
               slot={slot}
               adjustMode={adjustMode}
-              isAdjustTarget={adjustMode && product.id === activeLayerId}
+              isAdjustTarget={adjustMode && product.id === effectiveActiveLayerId}
               onSelect={setActiveLayerId}
             />
           ))}
