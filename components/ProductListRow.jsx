@@ -5,6 +5,7 @@ import { money } from '../lib/calc';
 import { LookItemControls } from './LookItemControls';
 import { ProductAttribution } from './ProductAttribution';
 import { ProductPhoto } from './ProductPhoto';
+import { ProductSpecs } from './ProductSpecs';
 
 export function ProductListRow({
   product,
@@ -36,8 +37,8 @@ export function ProductListRow({
       <div className="plr-main">
         <ProductAttribution product={product} compact />
         <h3>{product.name}</h3>
+        <ProductSpecs product={product} />
         <div className="plr-meta">
-          <span>{product.fabric?.split(',')[0] || '—'}</span>
           <span>Lead: {product.leadTime || 'TBC'}</span>
           <span>MOQ: {product.minOrder || 1}</span>
           {roleMatch === false && <span className="plr-warn">Role mismatch</span>}

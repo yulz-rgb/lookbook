@@ -1470,6 +1470,7 @@ small { color:var(--muted); }
 .plr-brand { font-size: 10px; font-weight: 900; text-transform: uppercase; color: var(--muted); }
 .plr-main h3 { margin: 2px 0; font-size: 13px; }
 .plr-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); }
+.product-list-row .product-specs { margin: 6px 0 4px; }
 .plr-warn { color: var(--gold-dark); font-weight: 800; }
 .plr-price { font-weight: 900; font-size: 16px; color: var(--navy); white-space: nowrap; }
 .plr-actions { display: flex; gap: 6px; }

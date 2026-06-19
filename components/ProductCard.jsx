@@ -10,6 +10,7 @@ import {
 import { LookItemControls } from './LookItemControls';
 import { ProductAttribution } from './ProductAttribution';
 import { ProductPhoto } from './ProductPhoto';
+import { ProductSpecs } from './ProductSpecs';
 
 export function ProductCard({
   product,
@@ -59,6 +60,7 @@ export function ProductCard({
         <ProductAttribution product={product} />
         <h3>{product.name}</h3>
         <div className="product-price">{money(product.price, product.currency)}</div>
+        <ProductSpecs product={product} />
         <div className="color-swatches">
           {(product.colours || []).slice(0, 8).map((c) => (
             <button
