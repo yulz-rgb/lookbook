@@ -893,21 +893,35 @@ a:focus-visible {
 }
 .budget-input:focus { border-color: var(--navy-light); box-shadow: var(--focus-ring); }
 .crew-breakdown { margin-bottom: 12px; }
-.crew-breakdown-hint {
-  margin: -4px 0 12px; font-size: 10px; line-height: 1.4; color: var(--muted);
+.crew-breakdown-picker-row { align-items: flex-start; }
+.crew-breakdown-picker-row > label { padding-top: 10px; }
+.crew-breakdown-picker { position: relative; flex: 0 0 84px; width: 84px; }
+.crew-breakdown-trigger {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: 11px; font-weight: 700; text-align: left;
+  cursor: pointer; min-height: 36px; color: var(--ink);
 }
-.crew-breakdown-header {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 8px; font-size: 10px; font-weight: 800; letter-spacing: .06em;
-  text-transform: uppercase; color: var(--muted);
+.crew-breakdown-trigger:disabled { opacity: .55; cursor: not-allowed; }
+.crew-breakdown-trigger-value {
+  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
-.crew-breakdown-total { font-variant-numeric: tabular-nums; }
-.crew-breakdown-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.crew-breakdown-row {
-  display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm);
+.crew-breakdown-trigger svg { flex-shrink: 0; transition: transform var(--tr); color: var(--muted); }
+.crew-breakdown-trigger svg.open { transform: rotate(180deg); }
+.crew-breakdown-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
+  width: min(92vw, 280px); max-height: min(60vh, 360px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg); padding: 8px;
 }
-.crew-breakdown-label { font-size: 12px; font-weight: 600; color: var(--ink-2); flex: 1; }
-.crew-breakdown-controls { display: flex; align-items: center; gap: 6px; }
+.crew-breakdown-menu-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+  padding: 6px 4px; border-bottom: 1px solid var(--line-light);
+}
+.crew-breakdown-menu-row:last-of-type { border-bottom: none; }
+.crew-breakdown-menu-label { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.crew-breakdown-stepper { display: flex; align-items: center; gap: 6px; }
 .crew-breakdown-remove {
   width: 24px; height: 24px; border: none; border-radius: 6px; background: transparent;
   color: var(--muted); display: inline-flex; align-items: center; justify-content: center;
@@ -915,15 +929,21 @@ a:focus-visible {
 }
 .crew-breakdown-remove:hover:not(:disabled) { color: var(--danger); background: rgba(220,38,38,.08); }
 .crew-breakdown-remove:disabled { opacity: .45; cursor: not-allowed; }
-.crew-breakdown-add { display: flex; gap: 6px; align-items: center; }
+.crew-breakdown-menu-add {
+  display: flex; gap: 6px; align-items: center; padding: 8px 4px 4px;
+  border-top: 1px solid var(--line-light); margin-top: 4px;
+}
+.crew-breakdown-menu-meta {
+  margin: 8px 4px 2px; font-size: 10px; line-height: 1.4; color: var(--muted);
+}
 .crew-breakdown-select {
   flex: 1; border: 1px solid var(--line); border-radius: var(--radius-sm);
   padding: 7px 8px; font-size: 11px; background: var(--surface-2); min-height: 32px;
 }
 .crew-breakdown-add-btn {
-  display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line);
-  border-radius: var(--radius-sm); padding: 7px 10px; font-size: 11px; font-weight: 700;
-  background: var(--surface-2); cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface-2); cursor: pointer;
 }
 .crew-breakdown-add-btn:disabled { opacity: .45; cursor: not-allowed; }
 .budget-divider { border: none; border-top: 1px solid var(--line); margin: 14px 0 16px; }

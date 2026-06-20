@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
-import { Minus, Plus, Trash2 } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { ChevronDown, Minus, Plus, Trash2 } from 'lucide-react';
 import {
   suggestPositionBreakdown,
   breakdownFromCrew,
@@ -11,6 +11,32 @@ import {
   removeRoleFromBreakdown,
   roleLabel,
 } from '../lib/crewComposition';
+
+function PositionStepper({ value, min = 0, disabled, onChange, label }) {
+  return (
+    <div className="crew-breakdown-stepper">
+      <button
+        type="button"
+        className="look-item-stepper-btn"
+        disabled={disabled || value <= min}
+        onClick={() => onChange(Math.max(min, value - 1))}
+        aria-label={`Decrease ${label}`}
+      >
+        <Minus size={12} />
+      </button>
+      <span className="look-item-stepper-value">{value}</span>
+      <button
+        type="button"
+        className="look-item-stepper-btn"
+        disabled={disabled}
+        onClick={() => onChange(value + 1)}
+        aria-label={`Increase ${label}`}
+      >
+        <Plus size={12} />
+      </button>
+    </div>
+  );
+}
 
 export function CrewBreakdown({
   crew,
@@ -26,16 +52,34 @@ export function CrewBreakdown({
     [crew, roleOptions],
   );
   const [crewInput, setCrewInput] = useState(String(breakdown.totalCrew));
+  const [open, setOpen] = useState(false);
   const [addRoleId, setAddRoleId] = useState('');
+  const menuRef = useRef(null);
 
   useEffect(() => {
     setCrewInput(String(breakdown.totalCrew));
   }, [breakdown.totalCrew]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    function handleClick(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
   const availableRoles = useMemo(
     () => roleOptions.filter((role) => !breakdown.positions.some((row) => row.roleId === role.id)),
     [roleOptions, breakdown.positions],
   );
+
+  const summaryText = useMemo(() => {
+    if (!breakdown.positions.length) return 'No positions';
+    return breakdown.positions
+      .map((row) => `${roleLabel(row.roleId, roleOptions)} ${row.count}`)
+      .join(', ');
+  }, [breakdown.positions, roleOptions]);
 
   function applyBreakdown(nextBreakdown) {
     const synced = syncCrewFromBreakdown(
@@ -92,81 +136,82 @@ export function CrewBreakdown({
           onBlur={() => setCrewInput(String(breakdown.totalCrew))}
         />
       </div>
-      <p className="crew-breakdown-hint">{tierHint} — positions auto-suggested from typical crew ratios</p>
 
-      <div className="crew-breakdown-header">
-        <span>Position breakdown</span>
-        <span className="crew-breakdown-total">{breakdown.totalCrew} total</span>
-      </div>
-
-      <div className="crew-breakdown-rows">
-        {breakdown.positions.map((row) => {
-          const isCustom = customRoleIds.has(row.roleId);
-          const canRemove = row.roleId !== 'captain' || row.count > 1;
-          return (
-            <div key={row.roleId} className="crew-breakdown-row">
-              <span className="crew-breakdown-label">{roleLabel(row.roleId, roleOptions)}</span>
-              <div className="crew-breakdown-controls">
-                <button
-                  type="button"
-                  className="look-item-stepper-btn"
-                  disabled={disabled || row.count <= (row.roleId === 'captain' ? 1 : 0)}
-                  onClick={() => handleAdjust(row.roleId, -1)}
-                  aria-label={`Decrease ${roleLabel(row.roleId, roleOptions)}`}
-                >
-                  <Minus size={12} />
-                </button>
-                <span className="look-item-stepper-value">{row.count}</span>
-                <button
-                  type="button"
-                  className="look-item-stepper-btn"
-                  disabled={disabled}
-                  onClick={() => handleAdjust(row.roleId, 1)}
-                  aria-label={`Increase ${roleLabel(row.roleId, roleOptions)}`}
-                >
-                  <Plus size={12} />
-                </button>
-                {canRemove && (
-                  <button
-                    type="button"
-                    className="crew-breakdown-remove"
-                    disabled={disabled}
-                    onClick={() => handleRemoveRole(row.roleId)}
-                    title={isCustom ? 'Remove custom position' : 'Remove position from breakdown'}
-                    aria-label={`Remove ${roleLabel(row.roleId, roleOptions)}`}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {availableRoles.length > 0 && (
-        <div className="crew-breakdown-add">
-          <select
-            className="crew-breakdown-select"
-            value={addRoleId}
-            disabled={disabled}
-            onChange={(e) => setAddRoleId(e.target.value)}
-          >
-            <option value="">Add position…</option>
-            {availableRoles.map((role) => (
-              <option key={role.id} value={role.id}>{role.label}</option>
-            ))}
-          </select>
+      <div className="budget-row crew-breakdown-picker-row">
+        <label>Position breakdown</label>
+        <div className="crew-breakdown-picker" ref={menuRef}>
           <button
             type="button"
-            className="crew-breakdown-add-btn"
-            disabled={disabled || !addRoleId}
-            onClick={handleAddRole}
+            className="crew-breakdown-trigger"
+            disabled={disabled}
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
           >
-            <Plus size={12} /> Add
+            <span className="crew-breakdown-trigger-value">{summaryText}</span>
+            <ChevronDown size={14} className={open ? 'open' : ''} />
           </button>
+          {open && (
+            <div className="crew-breakdown-menu">
+              {breakdown.positions.map((row) => {
+                const label = roleLabel(row.roleId, roleOptions);
+                const isCustom = customRoleIds.has(row.roleId);
+                const minCount = row.roleId === 'captain' ? 1 : 0;
+                const canRemove = row.roleId !== 'captain' || row.count > 1;
+                return (
+                  <div key={row.roleId} className="crew-breakdown-menu-row">
+                    <span className="crew-breakdown-menu-label">{label}</span>
+                    <PositionStepper
+                      label={label}
+                      value={row.count}
+                      min={minCount}
+                      disabled={disabled}
+                      onChange={(nextCount) => handleAdjust(row.roleId, nextCount - row.count)}
+                    />
+                    {canRemove && (
+                      <button
+                        type="button"
+                        className="crew-breakdown-remove"
+                        disabled={disabled}
+                        onClick={() => handleRemoveRole(row.roleId)}
+                        title={isCustom ? 'Remove custom position' : 'Remove position'}
+                        aria-label={`Remove ${label}`}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {availableRoles.length > 0 && (
+                <div className="crew-breakdown-menu-add">
+                  <select
+                    className="crew-breakdown-select"
+                    value={addRoleId}
+                    disabled={disabled}
+                    onChange={(e) => setAddRoleId(e.target.value)}
+                  >
+                    <option value="">Add position…</option>
+                    {availableRoles.map((role) => (
+                      <option key={role.id} value={role.id}>{role.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="crew-breakdown-add-btn"
+                    disabled={disabled || !addRoleId}
+                    onClick={handleAddRole}
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
+              )}
+              <p className="crew-breakdown-menu-meta">
+                {tierHint} · {breakdown.totalCrew} crew — auto-suggested from typical ratios
+              </p>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
