@@ -17,7 +17,6 @@ export async function POST(req) {
   let ctx = null;
   if (backendEnabled) {
     ctx = await getActiveContext();
-    if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let body;

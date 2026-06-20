@@ -31,6 +31,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/enquiry(.*)',
   '/api/import/extract(.*)',
   '/api/product-image(.*)',
+  '/api/tryon(.*)',
 ]);
 
 const clerkHandler = clerkMiddleware(async (auth, req) => {

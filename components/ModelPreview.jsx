@@ -25,6 +25,34 @@ function selectionKey(payload) {
   return JSON.stringify(payload);
 }
 
+async function parseTryOnResponse(res) {
+  if (res.type === 'opaqueredirect' || res.status === 307 || res.status === 308) {
+    throw new Error('Try-on is blocked by sign-in. Refresh the page or open /demo to generate without signing in.');
+  }
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    if (text.trimStart().startsWith('<!DOCTYPE') || text.trimStart().startsWith('<!doctype')) {
+      throw new Error('Try-on service returned an unexpected page instead of data. Refresh and try again.');
+    }
+    throw new Error('Try-on service returned an unexpected response. Please refresh and try again.');
+  }
+  return res.json();
+}
+
+async function postTryOn(payload) {
+  return fetch('/api/tryon', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    redirect: 'manual',
+  });
+}
+
+async function getTryOnRender(renderId) {
+  return fetch(`/api/tryon/${renderId}`, { redirect: 'manual' });
+}
+
 export function ModelPreview({ bodyType, selectedProducts = [] }) {
   const [view, setView] = useState('front');
   const [brightness, setBrightness] = useState(1);
@@ -91,9 +119,9 @@ export function ModelPreview({ bodyType, selectedProducts = [] }) {
     for (let attempt = 0; attempt < 30; attempt += 1) {
       if (requestRef.current !== requestId) return null;
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const res = await fetch(`/api/tryon/${renderId}`);
+      const res = await getTryOnRender(renderId);
       if (!res.ok) continue;
-      const data = await res.json();
+      const data = await parseTryOnResponse(res);
       if (requestRef.current !== requestId) return null;
       if (data.status === 'completed' && data.imageUrl) {
         return { ...data, lookVersion: expectedLookVersion };
@@ -116,14 +144,10 @@ export function ModelPreview({ bodyType, selectedProducts = [] }) {
     setError(null);
 
     try {
-      const res = await fetch('/api/tryon', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...currentPayload,
-          lookVersion: expectedLookVersion,
-          reroll,
-        }),
+      const res = await postTryOn({
+        ...currentPayload,
+        lookVersion: expectedLookVersion,
+        reroll,
       });
 
       if (res.status === 501) {
@@ -132,7 +156,7 @@ export function ModelPreview({ bodyType, selectedProducts = [] }) {
         return;
       }
 
-      const data = await res.json();
+      const data = await parseTryOnResponse(res);
       if (!res.ok) {
         throw new Error(data.error || 'AI try-on request failed');
       }
