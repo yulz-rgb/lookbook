@@ -288,7 +288,7 @@ export default function Workspace({ mode = 'local', initialData = null, authInfo
   const [showTeam, setShowTeam] = useState(false);
   const [colourChoices, setColourChoices] = useState({});
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [saveState, setSaveState] = useState('idle');
   const [order, setOrder] = useState(
     authInfo?.activeOrder ? { id: authInfo.activeOrder.id, status: authInfo.activeOrder.status } : null,
