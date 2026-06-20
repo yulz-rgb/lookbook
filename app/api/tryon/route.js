@@ -1,19 +1,22 @@
-import { hasAITryOn, generateTryOnImage } from '../../../lib/aiTryOn';
-import { getActiveContext } from '../../../lib/auth';
-import { backendEnabled } from '../../../lib/config';
-
-const MAX_GARMENTS = 6;
+import { hasAITryOn, requestTryOnRender } from '../../../lib/aiTryOn.js';
+import { getActiveContext } from '../../../lib/auth.js';
+import { backendEnabled } from '../../../lib/config.js';
+import { normalizeColours } from '../../../lib/tryOnProducts.js';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function POST(req) {
   if (!hasAITryOn()) {
-    return Response.json({ error: 'AI try-on is not configured (missing GEMINI_API_KEY)' }, { status: 501 });
+    return Response.json(
+      { error: 'AI try-on is not configured (missing GEMINI_API_KEY)' },
+      { status: 501 },
+    );
   }
 
+  let ctx = null;
   if (backendEnabled) {
-    const ctx = await getActiveContext();
+    ctx = await getActiveContext();
     if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -26,25 +29,41 @@ export async function POST(req) {
 
   const bodyType = body?.bodyType === 'man' ? 'man' : 'woman';
   const view = body?.view === 'back' ? 'back' : 'front';
-  const garments = Array.isArray(body?.garments)
-    ? body.garments
-        .filter((g) => g && typeof g.imageUrl === 'string' && g.imageUrl)
-        .slice(0, MAX_GARMENTS)
-        .map((g) => ({
-          imageUrl: g.imageUrl,
-          name: typeof g.name === 'string' ? g.name.slice(0, 120) : '',
-          label: typeof g.label === 'string' ? g.label.slice(0, 60) : 'garment',
-        }))
+  const productIds = Array.isArray(body?.productIds)
+    ? body.productIds.filter((id) => typeof id === 'string' && id)
     : [];
+  const colours = normalizeColours(body?.colours);
+  const lookVersion = Number.isFinite(body?.lookVersion) ? Number(body.lookVersion) : 0;
+  const reroll = Boolean(body?.reroll);
 
-  if (!garments.length) {
-    return Response.json({ error: 'No garments provided' }, { status: 400 });
+  if (!productIds.length) {
+    return Response.json({ error: 'No products provided' }, { status: 400 });
   }
 
   try {
-    const image = await generateTryOnImage({ bodyType, view, garments, origin: req.nextUrl.origin });
-    return Response.json({ image });
+    const result = await requestTryOnRender({
+      bodyType,
+      view,
+      productIds,
+      colours,
+      lookVersion,
+      reroll,
+      origin: req.nextUrl.origin,
+      yachtId: ctx?.yachtId || null,
+      userId: ctx?.user?.id || null,
+    });
+
+    return Response.json({
+      renderId: result.renderId,
+      status: result.status,
+      imageUrl: result.imageUrl,
+      excludedNote: result.excludedNote,
+      lookVersion: result.lookVersion,
+    });
   } catch (err) {
-    return Response.json({ error: String(err?.message || err) }, { status: 502 });
+    return Response.json(
+      { error: String(err?.message || err), status: 'failed' },
+      { status: 502 },
+    );
   }
 }

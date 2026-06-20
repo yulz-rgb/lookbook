@@ -42,6 +42,12 @@ enum ArtifactType {
   JSON
 }
 
+enum TryOnRenderStatus {
+  generating
+  completed
+  failed
+}
+
 model User {
   id          String       @id @default(cuid())
   clerkId     String       @unique
@@ -261,4 +267,31 @@ model AuditEvent {
 
   @@index([yachtId])
   @@index([createdAt])
+}
+
+model TryOnRender {
+  id            String            @id @default(cuid())
+  cacheKey      String            @unique
+  yachtId       String?
+  userId        String?
+  modelId       String
+  bodyType      BodyType
+  view          String
+  productIds    String[]          @default([])
+  colours       Json              @default("{}")
+  geminiModel   String
+  promptVersion String
+  rerollSeed    Int               @default(0)
+  lookVersion   Int               @default(0)
+  blobUrl       String?
+  status        TryOnRenderStatus @default(generating)
+  errorCode     String?
+  excludedNote  String?
+  createdAt     DateTime          @default(now())
+  completedAt   DateTime?
+  updatedAt     DateTime          @updatedAt
+
+  @@index([yachtId])
+  @@index([userId])
+  @@index([status])
 }

@@ -13,6 +13,7 @@
 # misc
 .DS_Store
 *.pem
+/public/generated-tryon/
 
 # debug
 npm-debug.log*
