@@ -5,7 +5,6 @@ import { Pencil, Upload, X } from 'lucide-react';
 import Workspace from './Workspace';
 
 const NAVY = '#0b1f3a';
-const BG = 'https://images.unsplash.com/photo-1520670255513-79161a36e39c?auto=format&fit=crop&fm=jpg&q=84&w=2400';
 
 export default function FirstLoginHome() {
   const [vesselName, setVesselName] = useState('M/Y CONFIDENTIAL');
@@ -26,38 +25,78 @@ export default function FirstLoginHome() {
   return (
     <main style={{
       minHeight: '100vh',
-      backgroundImage: `linear-gradient(rgba(246,249,252,.5), rgba(238,244,249,.58)), url(${BG})`,
+      position: 'relative',
+      overflow: 'hidden',
+      backgroundImage: 'url(/onboarding-yacht.jpg)',
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       color: NAVY,
       fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       display: 'grid',
       placeItems: 'center',
-      padding: '32px 24px',
+      padding: '28px 24px',
     }}>
       <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'linear-gradient(180deg, rgba(244,248,252,.04), rgba(237,243,248,.08))',
+        pointerEvents: 'none',
+      }} />
+
+      <div style={{
         position: 'fixed',
-        top: 28,
-        left: 34,
+        top: 27,
+        left: 31,
+        zIndex: 2,
         fontFamily: 'Georgia, Times New Roman, serif',
         fontSize: 22,
-        letterSpacing: '-.02em',
+        letterSpacing: '-.025em',
         color: NAVY,
       }}>
         YachtUniform
       </div>
 
+      <div style={{
+        position: 'fixed',
+        top: 23,
+        right: 31,
+        zIndex: 2,
+        width: 35,
+        height: 35,
+        borderRadius: '50%',
+        display: 'grid',
+        placeItems: 'center',
+        background: 'rgba(213,223,234,.78)',
+        color: '#445b77',
+        fontSize: 12,
+        fontWeight: 700,
+      }}>
+        CS
+      </div>
+
       <section style={{
+        position: 'relative',
+        zIndex: 1,
         width: 'min(760px, calc(100vw - 36px))',
         borderRadius: 34,
-        border: '1px solid rgba(255,255,255,.78)',
+        border: '1px solid rgba(255,255,255,.8)',
         background: 'rgba(248,250,253,.76)',
         backdropFilter: 'blur(22px) saturate(115%)',
         WebkitBackdropFilter: 'blur(22px) saturate(115%)',
         boxShadow: '0 24px 70px rgba(18,38,63,.18)',
-        padding: 'clamp(46px, 7vw, 74px) clamp(28px, 6vw, 56px)',
+        padding: 'clamp(48px, 7vw, 70px) clamp(28px, 6vw, 54px)',
         textAlign: 'center',
       }}>
+        <div style={{
+          fontSize: 39,
+          lineHeight: 1,
+          marginBottom: 30,
+          opacity: .48,
+          fontFamily: 'Georgia, Times New Roman, serif',
+        }}>
+          ≋
+        </div>
+
         {!editing ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <h1 style={{
@@ -76,15 +115,7 @@ export default function FirstLoginHome() {
               onClick={() => { setDraftName(vesselName); setEditing(true); }}
               aria-label="Edit yacht name"
               title="Edit yacht name"
-              style={{
-                border: 0,
-                background: 'transparent',
-                color: NAVY,
-                cursor: 'pointer',
-                padding: 6,
-                display: 'grid',
-                placeItems: 'center',
-              }}
+              style={{ border: 0, background: 'transparent', color: NAVY, cursor: 'pointer', padding: 6 }}
             >
               <Pencil size={18} strokeWidth={1.8} />
             </button>
@@ -109,32 +140,16 @@ export default function FirstLoginHome() {
                 border: '1px solid rgba(11,31,58,.16)',
                 borderRadius: 12,
                 outline: 'none',
-                background: 'rgba(255,255,255,.8)',
+                background: 'rgba(255,255,255,.82)',
                 color: NAVY,
               }}
             />
-            <button
-              type="button"
-              onClick={saveName}
-              style={{ border: 0, background: NAVY, color: '#fff', padding: '11px 15px', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}
-            >Save</button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              aria-label="Cancel edit"
-              style={{ border: 0, background: 'transparent', color: NAVY, cursor: 'pointer', padding: 7 }}
-            >
-              <X size={18} />
-            </button>
+            <button type="button" onClick={saveName} style={{ border: 0, background: NAVY, color: '#fff', padding: '11px 15px', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Save</button>
+            <button type="button" onClick={() => setEditing(false)} aria-label="Cancel edit" style={{ border: 0, background: 'transparent', color: NAVY, cursor: 'pointer', padding: 7 }}><X size={18} /></button>
           </div>
         )}
 
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv,.pdf"
-          style={{ display: 'none' }}
-        />
+        <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" style={{ display: 'none' }} />
 
         <button
           type="button"
@@ -142,8 +157,8 @@ export default function FirstLoginHome() {
           style={{
             width: '100%',
             minHeight: 228,
-            marginTop: 'clamp(38px, 6vw, 58px)',
-            border: '1px dashed rgba(11,31,58,.2)',
+            marginTop: 'clamp(42px, 6vw, 60px)',
+            border: '1px dashed rgba(11,31,58,.18)',
             borderRadius: 28,
             background: 'rgba(255,255,255,.72)',
             color: NAVY,
@@ -152,7 +167,7 @@ export default function FirstLoginHome() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 20,
+            gap: 19,
             padding: 30,
             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.35)',
           }}
@@ -161,19 +176,17 @@ export default function FirstLoginHome() {
             width: 76,
             height: 76,
             borderRadius: '50%',
-            background: 'rgba(230,237,245,.9)',
+            background: 'rgba(230,237,245,.92)',
             display: 'grid',
             placeItems: 'center',
           }}>
             <Upload size={34} strokeWidth={1.5} />
           </span>
-          <span style={{
-            fontFamily: 'Georgia, Times New Roman, serif',
-            fontSize: 'clamp(20px, 3vw, 30px)',
-            fontWeight: 400,
-            lineHeight: 1.2,
-          }}>
+          <span style={{ fontFamily: 'Georgia, Times New Roman, serif', fontSize: 'clamp(20px, 3vw, 30px)', fontWeight: 400, lineHeight: 1.2 }}>
             Import current crew, sizes & inventory
+          </span>
+          <span style={{ fontSize: 12, letterSpacing: '.24em', color: '#7f8ea3' }}>
+            Excel · CSV · PDF
           </span>
         </button>
 
@@ -181,17 +194,17 @@ export default function FirstLoginHome() {
           type="button"
           onClick={() => setManualMode(true)}
           style={{
-            marginTop: 24,
+            marginTop: 32,
             border: 0,
+            borderBottom: '1px solid rgba(11,31,58,.45)',
             background: 'transparent',
             color: NAVY,
             fontSize: 14,
-            fontWeight: 600,
             cursor: 'pointer',
-            padding: 6,
+            padding: '2px 0 3px',
           }}
         >
-          Start manually
+          No file? Start manually →
         </button>
       </section>
     </main>
