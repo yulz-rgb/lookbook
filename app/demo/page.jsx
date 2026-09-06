@@ -1,10 +1,10 @@
-import FirstLoginHome from '../../components/FirstLoginHome';
+import SelectedOnboardingHome from '../../components/SelectedOnboardingHome';
 
 export const metadata = {
   title: 'Demo — YachtUniform',
-  description: 'Import your current crew, uniform inventory and sizing file into YachtUniform.',
+  description: 'Import current crew, sizes and uniform inventory into YachtUniform.',
 };
 
 export default function DemoPage() {
-  return <FirstLoginHome />;
+  return <SelectedOnboardingHome />;
 }
