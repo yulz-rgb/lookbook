@@ -1,4 +1,5 @@
 import Workspace from '../../components/Workspace';
+import ClearLegacyDemoState from '../../components/ClearLegacyDemoState';
 
 // Public demo — no ClerkProvider (see app/(auth)/layout.jsx) and proxy skips Clerk middleware.
 export const metadata = {
@@ -7,5 +8,10 @@ export const metadata = {
 };
 
 export default function DemoPage() {
-  return <Workspace mode="local" canUpload={false} isDemo />;
+  return (
+    <>
+      <ClearLegacyDemoState />
+      <Workspace mode="local" canUpload={false} isDemo />
+    </>
+  );
 }
