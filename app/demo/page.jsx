@@ -1,17 +1,10 @@
-import Workspace from '../../components/Workspace';
-import ClearLegacyDemoState from '../../components/ClearLegacyDemoState';
+import FirstLoginHome from '../../components/FirstLoginHome';
 
-// Public demo — no ClerkProvider (see app/(auth)/layout.jsx) and proxy skips Clerk middleware.
 export const metadata = {
-  title: 'Demo — Yacht Uniform Lookbook',
-  description: 'Try the yacht uniform lookbook without signing in.',
+  title: 'Demo — YachtUniform',
+  description: 'Import your current crew, uniform inventory and sizing file into YachtUniform.',
 };
 
 export default function DemoPage() {
-  return (
-    <>
-      <ClearLegacyDemoState />
-      <Workspace mode="local" canUpload={false} isDemo />
-    </>
-  );
+  return <FirstLoginHome />;
 }
